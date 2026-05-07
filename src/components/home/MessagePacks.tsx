@@ -5,28 +5,28 @@ import { MessageSquare, Check } from "lucide-react";
 const packs = [
   {
     name: "Muwoyo Small",
-    messages: "500",
+    messages: "1.000",
     price: "7.500",
-    perMsg: "15,00 Kz",
+    perMsg: "7,50 Kz",
   },
   {
     name: "Muwoyo Medium",
-    messages: "1.000",
+    messages: "2.500",
     price: "14.000",
-    perMsg: "14,00 Kz",
+    perMsg: "5,60 Kz",
     highlight: true,
   },
   {
     name: "Muwoyo Medium II",
-    messages: "3.000",
+    messages: "7.500",
     price: "40.000",
-    perMsg: "13,33 Kz",
+    perMsg: "5,33 Kz",
   },
   {
     name: "Muwoyo Big",
-    messages: "5.000",
+    messages: "15.000",
     price: "65.000",
-    perMsg: "13,00 Kz",
+    perMsg: "4,33 Kz",
   },
 ];
 
