@@ -155,7 +155,7 @@ Deno.serve(async (req) => {
           email,
           business_name: name,
           created_by: actor.user.id,
-          message_limit: role === "client" ? 500 : 0,
+          message_limit: role === "client" ? 1000 : 0,
           free_messages_granted: role === "client",
           onboarding_completed: role !== "client",
         })

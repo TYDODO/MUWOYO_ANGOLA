@@ -103,7 +103,7 @@ const Footer = () => {
             <ul className="space-y-3 text-sm">
               <li>
                 <Link
-                  to="/termos-de-uso"
+                  to="/termos-uso"
                   className="text-background/70 hover:text-primary transition-colors"
                 >
                   Termos de Uso
@@ -111,26 +111,10 @@ const Footer = () => {
               </li>
               <li>
                 <Link
-                  to="/politica-de-privacidade"
+                  to="/politica-privacidade"
                   className="text-background/70 hover:text-primary transition-colors"
                 >
                   Política de Privacidade
-                </Link>
-              </li>
-              <li>
-                <Link
-                  to="/uso-aceitavel"
-                  className="text-background/70 hover:text-primary transition-colors"
-                >
-                  Uso Aceitável
-                </Link>
-              </li>
-              <li>
-                <Link
-                  to="/afiliados"
-                  className="text-background/70 hover:text-primary transition-colors"
-                >
-                  Programa de Afiliados
                 </Link>
               </li>
             </ul>

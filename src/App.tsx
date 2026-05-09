@@ -26,6 +26,10 @@ import LandingPageMWY from "../LandingPageMWY";
 import SubAdminCreateUser from "./pages/subadmin/CreateUser";
 import SubAdminUsers from "./pages/subadmin/Users";
 import SubAdminNotifyAdmin from "./pages/subadmin/NotifyAdmin";
+import { PrivacyPolicy } from "./pages/PrivacyPolicy";
+import { TermsOfUse } from "./pages/TermsOfUse";
+import { PrivacyPolicyViewer } from "./pages/PrivacyPolicyViewer";
+import { TermsOfUseViewer } from "./pages/TermsOfUseViewer";
 
 const queryClient = new QueryClient();
 const protectedPage = (page: JSX.Element) => (
@@ -118,6 +122,11 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/politica-privacidade"
+              element={<PrivacyPolicyViewer />}
+            />
+            <Route path="/termos-uso" element={<TermsOfUseViewer />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
