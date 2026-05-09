@@ -122,7 +122,12 @@ Deno.serve(async (req) => {
         password,
         phone: `+${phone}`,
         email_confirm: true,
-        user_metadata: { full_name: name, phone, created_by: actor.user.id },
+        user_metadata: {
+          full_name: name,
+          phone,
+          created_by: actor.user.id,
+          is_subadmin: action === "createSubadmin",
+        },
       });
       if (created.error) return json({ error: created.error.message }, 400);
       const userId = created.data.user.id;
