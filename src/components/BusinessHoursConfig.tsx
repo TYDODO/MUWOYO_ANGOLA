@@ -178,16 +178,10 @@ export default function BusinessHoursConfig({ onSave }: Props) {
 
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-wrap gap-2">
-                <Button variant="outline" onClick={applyCommonTimes} className="hidden md:inline-flex">
-                  Aplicar horário a dias selecionados
-                </Button>
-                <Button onClick={() => setCustomOpen(true)}>
-                  Personalizar horários
-                </Button>
               </div>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-2 grid-cols-4 sm:grid-cols-7">
               {weekDays.map((d) => {
                 const short = d.label.split('-')[0] || d.label;
                 const open = businessHours[d.key].open;
@@ -196,7 +190,7 @@ export default function BusinessHoursConfig({ onSave }: Props) {
                     key={d.key}
                     type="button"
                     onClick={() => toggleDay(d.key)}
-                    className={`rounded-full px-3 py-1 text-sm font-medium transition ${open ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-700'}`}>
+                    className={`rounded-full px-2 py-1 text-xs sm:text-sm font-medium transition ${open ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-700'}`}>
                     {short.replace('feira','').slice(0,3)}
                   </button>
                 );
@@ -216,9 +210,9 @@ export default function BusinessHoursConfig({ onSave }: Props) {
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 pt-2">
+            <div className="flex flex-wrap items-center gap-2 pt-4">
               <Button variant="outline" onClick={applyCommonTimes}>
-                Aplicar horário a dias selecionados
+                Aplicar horário
               </Button>
               <Button onClick={() => setCustomOpen(true)}>
                 Personalizar horários

@@ -26,10 +26,28 @@ type Appt = {
   created_at: string;
 };
 
-const getDateKey = (value: string | Date) => new Date(value).toISOString().slice(0, 10);
+// Angola timezone is UTC+1 (Africa/Luanda). We normalize instants to Angola local
+// time for grouping and display so dates/times shown are consistent for users in Angola.
+const ANGOLA_OFFSET_MIN = -60; // minutes from UTC (UTC+1 => -60 from Date.getTimezoneOffset semantics)
+
+const toAngolaDate = (value: string | Date) => {
+  const d = new Date(value);
+  const utcMs = d.getTime();
+  const localOffsetMin = d.getTimezoneOffset();
+  const adjustMin = ANGOLA_OFFSET_MIN - localOffsetMin;
+  return new Date(utcMs + adjustMin * 60 * 1000);
+};
+
+const getDateKey = (value: string | Date) => {
+  const d = toAngolaDate(value);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
 
 const formatDateLabel = (date: Date) =>
-  date.toLocaleDateString("pt-AO", {
+  toAngolaDate(date).toLocaleDateString("pt-AO", {
     weekday: "long",
     day: "2-digit",
     month: "long",
@@ -37,7 +55,7 @@ const formatDateLabel = (date: Date) =>
 
 const formatTimeLabel = (value: string | null) =>
   value
-    ? new Date(value).toLocaleTimeString("pt-AO", {
+    ? toAngolaDate(value).toLocaleTimeString("pt-AO", {
         hour: "2-digit",
         minute: "2-digit",
       })
@@ -189,7 +207,7 @@ export default function Schedule() {
 
   const handleAppointmentClick = (appt: Appt) => {
     if (appt.scheduled_at) {
-      setSelectedDate(new Date(appt.scheduled_at));
+      setSelectedDate(startOfDay(toAngolaDate(appt.scheduled_at)));
     }
     setDialogOpen(true);
   };
@@ -224,9 +242,9 @@ export default function Schedule() {
 
                 <div className="overflow-x-auto sm:rounded-3xl sm:bg-slate-50 sm:p-1">
                   <div className="w-full max-w-[min(100vw-1.5rem,26rem)] mx-auto">
-                    <div className="grid grid-cols-7 gap-2 text-center text-[0.65rem] font-semibold uppercase tracking-[0.24em] text-slate-500">
+                    <div className="flex gap-2 overflow-x-auto text-center text-[0.65rem] font-semibold uppercase tracking-[0.24em] text-slate-500 sm:grid sm:grid-cols-7 sm:gap-2">
                       {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map((day) => (
-                        <div key={day} className="py-2">
+                        <div key={day} className="py-2 min-w-[3.25rem] sm:min-w-0">
                           {day}
                         </div>
                       ))}
@@ -395,7 +413,7 @@ export default function Schedule() {
                       </div>
                       <div className="flex items-center gap-2 text-sm text-slate-800">
                         <Clock className="h-4 w-4" />
-                        {formatDateLabel(new Date(appt.scheduled_at || ""))} • {formatTimeLabel(appt.scheduled_at)}
+                        {formatTimeLabel(appt.scheduled_at)}
                       </div>
                       {appt.description && (
                         <div className="rounded-2xl bg-slate-950/5 p-4 text-sm text-slate-800">
