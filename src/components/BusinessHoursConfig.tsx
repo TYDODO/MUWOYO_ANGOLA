@@ -152,8 +152,7 @@ export default function BusinessHoursConfig({ onSave }: Props) {
     } else {
       const { error } = await supabase
         .from("profiles")
-        .update({ business_hours: businessHours })
-        .eq("user_id", user.id);
+        .upsert({ user_id: user.id, business_hours: businessHours }, { onConflict: "user_id" });
       result = { error };
     }
     setSaving(false);

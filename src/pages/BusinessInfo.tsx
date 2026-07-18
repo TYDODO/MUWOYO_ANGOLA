@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { buildProfilePayload } from "@/lib/profile-persistence";
 
 export default function BusinessInfo() {
   const { user } = useAuth();
@@ -26,9 +27,12 @@ export default function BusinessInfo() {
   const save = async (businessHours?: any) => {
     if (!user) return { error: { message: "Sem utilizador" } };
     setSaving(true);
-    const payload = { ...form } as any;
-    if (businessHours) payload.business_hours = businessHours;
-    const { error } = await supabase.from("profiles").update(payload).eq("user_id", user.id);
+    const payload = buildProfilePayload({
+      userId: user.id,
+      form,
+      businessHours,
+    });
+    const { error } = await supabase.from("profiles").upsert(payload, { onConflict: "user_id" });
     setSaving(false);
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
