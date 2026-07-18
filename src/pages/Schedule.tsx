@@ -200,13 +200,13 @@ export default function Schedule() {
       description="Visualização de calendário com agendamentos e detalhes por dia."
     >
       <div className="space-y-6">
-        <Card className="rounded-3xl border-border bg-card/90 shadow-sm min-h-[620px]">
-          <CardHeader>
+        <Card className="rounded-3xl bg-transparent shadow-none border-none min-h-auto sm:border-border sm:bg-card/90 sm:shadow-sm sm:min-h-[620px]">
+          <CardHeader className="hidden sm:block">
             <CardTitle>Minha Agenda</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-6 xl:grid-cols-[minmax(420px,1.1fr)_minmax(380px,0.9fr)]">
             <section className="space-y-6">
-              <div className="rounded-3xl border border-border bg-slate-50 p-5">
+              <div className="rounded-none border-none bg-transparent p-0 sm:rounded-3xl sm:border sm:border-border sm:bg-slate-50 sm:p-5">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-sm uppercase tracking-[0.24em] text-slate-500">Calendário</p>
@@ -222,8 +222,8 @@ export default function Schedule() {
                   </div>
                 </div>
 
-                <div className="overflow-x-auto rounded-3xl bg-slate-50 p-1">
-                  <div className="min-w-[26rem]">
+                <div className="overflow-x-auto sm:rounded-3xl sm:bg-slate-50 sm:p-1">
+                  <div className="w-full max-w-[min(100vw-1.5rem,26rem)] mx-auto">
                     <div className="grid grid-cols-7 gap-2 text-center text-[0.65rem] font-semibold uppercase tracking-[0.24em] text-slate-500">
                       {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map((day) => (
                         <div key={day} className="py-2">
@@ -251,7 +251,7 @@ export default function Schedule() {
                         key={key}
                         type="button"
                         onClick={() => handleDateSelect(date)}
-                        className={`group aspect-square w-full rounded-3xl p-3 text-left transition ${baseStyles} ${!isCurrentMonth ? 'opacity-50' : ''}`}
+                        className={`group w-full rounded-3xl p-2 text-left transition sm:aspect-square ${baseStyles} ${!isCurrentMonth ? 'opacity-50' : ''}`}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-base font-semibold leading-none">{format(date, 'd')}</span>
@@ -346,7 +346,7 @@ export default function Schedule() {
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-3xl max-w-full max-h-[80vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-3xl w-full max-w-[calc(100vw-1.5rem)] mx-auto max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Agendamentos para {selectedDate ? formatDateLabel(selectedDate) : "data selecionada"}</DialogTitle>
             <DialogDescription>
@@ -418,7 +418,7 @@ export default function Schedule() {
       </Dialog>
 
       <Dialog open={allModalOpen} onOpenChange={setAllModalOpen}>
-        <DialogContent className="sm:max-w-3xl max-w-full max-h-[80vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-3xl w-full max-w-[calc(100vw-1.5rem)] mx-auto max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Todos os agendamentos confirmados</DialogTitle>
             <DialogDescription>{upcomingConfirmed.length} agendamento{upcomingConfirmed.length === 1 ? "" : "s"} confirmados futuros.</DialogDescription>
@@ -448,7 +448,7 @@ export default function Schedule() {
       </Dialog>
 
       <Dialog open={historyModalOpen} onOpenChange={setHistoryModalOpen}>
-        <DialogContent className="sm:max-w-3xl max-w-full max-h-[80vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-3xl w-full max-w-[calc(100vw-1.5rem)] mx-auto max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Histórico de agendamentos</DialogTitle>
             <DialogDescription>{historyItems.length} agendamento{historyItems.length === 1 ? "" : "s"} recentes.</DialogDescription>
