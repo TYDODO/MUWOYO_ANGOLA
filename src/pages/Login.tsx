@@ -1,279 +1,202 @@
-import { useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Eye, EyeOff } from "lucide-react";
 import logo from "@/assets/muwoyo-logo.png";
 
 export default function Login() {
-  const { user, signIn, signUp, loading } = useAuth();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const { user, signIn, loading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [fullName, setFullName] = useState("");
-  const [phone, setPhone] = useState("");
   const [show, setShow] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  if (!loading && user) {
-    // Verificar o role do usuário
-    const checkUserRole = async () => {
-      try {
-        console.log("Verificando role do usuário:", user.id);
-        const { data: roleData } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", user.id)
-          .maybeSingle();
+  useEffect(() => {
+    if (!loading && user) {
+      const checkUserRole = async () => {
+        try {
+          const { data: roleData } = await supabase
+            .from("user_roles")
+            .select("role")
+            .eq("user_id", user.id)
+            .maybeSingle();
 
-        console.log("Dados do role:", roleData);
-        const userRole = roleData?.role || "client";
-        console.log("Role final:", userRole);
-
-        // Redirecionar baseado no role
-        if (userRole === "admin") {
-          console.log("Redirecionando para /admin");
-          navigate("/admin", { replace: true });
-        } else if (userRole === "sub_admin") {
-          console.log("Redirecionando para /gestor");
-          navigate("/gestor", { replace: true });
-        } else {
-          console.log("Redirecionando para /dashboard");
+          const userRole = roleData?.role || "client";
+          if (userRole === "admin") {
+            navigate("/admin", { replace: true });
+          } else if (userRole === "sub_admin") {
+            navigate("/gestor", { replace: true });
+          } else {
+            navigate("/dashboard", { replace: true });
+          }
+        } catch (error) {
+          console.error("Erro ao verificar role:", error);
           navigate("/dashboard", { replace: true });
         }
-      } catch (error) {
-        console.error("Erro ao verificar role:", error);
-        navigate("/dashboard", { replace: true });
-      }
-    };
+      };
 
-    checkUserRole();
-    return null; // Retornar null enquanto verifica o role
+      checkUserRole();
+    }
+  }, [loading, user, navigate]);
+
+  if (!loading && user) {
+    return null;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    if (mode === "signin") {
-      const { error } = await signIn(email, password);
-      setSubmitting(false);
-      if (error)
-        return toast({
-          title: "Erro ao entrar",
-          description: error,
-          variant: "destructive",
-        });
+    const { error } = await signIn(email, password);
+    setSubmitting(false);
+    if (error)
+      return toast({
+        title: "Erro ao entrar",
+        description: error,
+        variant: "destructive",
+      });
 
-      // Verificar o role do usuário após login
-      try {
-        // Obter o usuário atual
-        const {
-          data: { user: currentUser },
-          error: userError,
-        } = await supabase.auth.getUser();
+    try {
+      const {
+        data: { user: currentUser },
+        error: userError,
+      } = await supabase.auth.getUser();
 
-        if (userError || !currentUser) {
-          console.error("Erro ao obter usuário:", userError);
-          navigate("/dashboard", { replace: true });
-          return;
-        }
+      if (userError || !currentUser) {
+        navigate("/dashboard", { replace: true });
+        return;
+      }
 
-        console.log("Verificando role após login do usuário:", currentUser.id);
-        const { data: roleData } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", currentUser.id)
-          .maybeSingle();
+      const { data: roleData } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", currentUser.id)
+        .maybeSingle();
 
-        console.log("Dados do role após login:", roleData);
-        const userRole = roleData?.role || "client";
-        console.log("Role final após login:", userRole);
-
-        // Redirecionar baseado no role
-        if (userRole === "admin") {
-          console.log("Redirecionando para /admin após login");
-          navigate("/admin", { replace: true });
-        } else if (userRole === "sub_admin") {
-          console.log("Redirecionando para /gestor após login");
-          navigate("/gestor", { replace: true });
-        } else {
-          console.log("Redirecionando para /dashboard após login");
-          navigate("/dashboard", { replace: true });
-        }
-      } catch (error) {
-        console.error("Erro ao verificar role após login:", error);
+      const userRole = roleData?.role || "client";
+      if (userRole === "admin") {
+        navigate("/admin", { replace: true });
+      } else if (userRole === "sub_admin") {
+        navigate("/gestor", { replace: true });
+      } else {
         navigate("/dashboard", { replace: true });
       }
-    } else {
-      const { error } = await signUp(email, password, {
-        full_name: fullName,
-        phone,
-      });
-      setSubmitting(false);
-      if (error)
-        return toast({
-          title: "Erro",
-          description: error,
-          variant: "destructive",
-        });
-      toast({
-        title: "Conta criada",
-        description: "Pode iniciar sessão agora.",
-      });
-      setMode("signin");
+    } catch (error) {
+      console.error("Erro ao verificar role após login:", error);
+      navigate("/dashboard", { replace: true });
     }
   };
 
-  return (
-    <div className="relative min-h-screen overflow-hidden bg-background">
-      {/* Decorative background */}
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.18]"
-        style={{
-          backgroundImage:
-            "radial-gradient(circle at 15% 20%, hsl(var(--primary)) 0%, transparent 35%), radial-gradient(circle at 85% 80%, hsl(var(--primary)) 0%, transparent 40%), radial-gradient(circle at 50% 50%, hsl(var(--primary)) 0%, transparent 55%)",
-        }}
-      />
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.06]"
-        style={{
-          backgroundImage:
-            "linear-gradient(hsl(var(--foreground)) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--foreground)) 1px, transparent 1px)",
-          backgroundSize: "44px 44px",
-        }}
-      />
+  const handleCreateAccount = () => {
+    const message = encodeURIComponent("Olá! Quero criar minha conta na Muwoyo.");
+    window.open(`https://wa.me/244928663898?text=${message}`, "_blank");
+  };
 
-      <div className="relative z-10 flex min-h-screen items-center justify-center px-4 py-10">
-        <div className="w-full max-w-md rounded-2xl border border-border/60 bg-card/90 p-7 shadow-xl backdrop-blur sm:p-9">
-          <div className="mb-7 flex items-center gap-3">
-            <img src={logo} alt="Muwoyo" className="h-11 w-11 object-contain" />
+  return (
+    <div className="min-h-screen bg-gray-100 p-4 flex items-center justify-center">
+      <div className="w-full max-w-4xl overflow-hidden rounded-3xl bg-white shadow-2xl h-[600px] flex flex-col md:flex-row">
+        <div className="w-full md:w-5/12 bg-gray-50 p-10 flex flex-col justify-center">
+          <div className="mb-8 flex items-center gap-3">
+            <img src={logo} alt="Muwoyo" className="h-12 w-12 object-contain" />
             <div>
-              <div className="text-xl font-bold leading-none">Muwoyo</div>
-              <div className="text-xs text-muted-foreground">
-                Empresa de automação de WhatsApp
-              </div>
+              <h1 className="text-2xl font-bold text-gray-800">Muwoyo</h1>
             </div>
           </div>
 
-          <h1 className="text-2xl font-bold tracking-tight">
-            {mode === "signin" ? "Entrar na sua conta" : "Criar nova conta"}
-          </h1>
-          <p className="mt-1.5 text-sm text-muted-foreground">
-            {mode === "signin"
-              ? "Acesse o painel da Muwoyo."
-              : "Crie a sua conta para começar."}
-          </p>
+          <h2 className="text-3xl font-bold text-gray-800 mb-2">Login</h2>
+          <p className="text-gray-500 mb-8">Entre com seus dados</p>
 
-          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-            {mode === "signup" && (
-              <>
-                <div className="space-y-2">
-                  <Label>Nome completo</Label>
-                  <Input
-                    required
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    className="h-11"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Telefone</Label>
-                  <Input
-                    required
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="h-11"
-                    placeholder="244928663898"
-                  />
-                </div>
-              </>
-            )}
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <input
                 id="email"
                 type="email"
                 autoComplete="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="h-11"
+                placeholder="Usuário"
+                className="w-full border-b border-gray-300 py-2 bg-transparent outline-none transition focus:border-whatsapp"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Senha</Label>
-              <div className="relative">
-                <Input
-                  id="password"
-                  type={show ? "text" : "password"}
-                  autoComplete={
-                    mode === "signin" ? "current-password" : "new-password"
-                  }
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="h-11 pr-10"
-                />
-                <button
-                  type="button"
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                  onClick={() => setShow(!show)}
-                >
-                  {show ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
+            <div>
+              <input
+                id="password"
+                type={show ? "text" : "password"}
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Senha"
+                className="w-full border-b border-gray-300 py-2 bg-transparent outline-none transition focus:border-whatsapp"
+              />
             </div>
-            <Button type="submit" className="h-11 w-full" disabled={submitting}>
-              {submitting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : mode === "signin" ? (
-                "Entrar"
-              ) : (
-                "Criar conta"
-              )}
-            </Button>
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                className="text-sm text-gray-400 hover:text-whatsapp transition"
+                onClick={() => setShow(!show)}
+              >
+                {show ? "Ocultar senha" : "Mostrar senha"}
+              </button>
+              <button
+                type="button"
+                className="text-sm text-gray-400 hover:text-whatsapp transition"
+                onClick={handleCreateAccount}
+              >
+                Criar conta
+              </button>
+            </div>
+            <button
+              type="submit"
+              className="w-full rounded-lg bg-whatsapp py-3 text-white font-semibold hover:bg-green-800 transition"
+              disabled={submitting}
+            >
+              {submitting ? "Carregando..." : "Login"}
+            </button>
           </form>
 
-          <div className="my-6 flex items-center gap-3">
-            <div className="h-px flex-1 bg-border" />
-            <span className="text-xs text-muted-foreground">
-              {mode === "signin" ? "AINDA NÃO TEM CONTA?" : "JÁ TEM CONTA?"}
-            </span>
-            <div className="h-px flex-1 bg-border" />
+          <div className="mt-auto space-y-4 pt-10 text-sm">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-400">Não possui conta?</span>
+              <button
+                type="button"
+                className="rounded border border-gray-300 px-4 py-1 text-sm hover:bg-gray-200 transition"
+                onClick={handleCreateAccount}
+              >
+                Criar conta
+              </button>
+            </div>
+            <button
+              type="button"
+              className="text-left text-sm text-gray-500 hover:text-whatsapp transition"
+              onClick={() => navigate("/")}
+            >
+              Voltar para o site
+            </button>
           </div>
+        </div>
 
-          <Button
-            variant="outline"
-            className="h-11 w-full"
-            onClick={() => {
-              if (mode === "signin") {
-                const message = encodeURIComponent(
-                  "Olá! Quero criar minha conta na Muwoyo.",
-                );
-                window.open(
-                  `https://wa.me/5511999999999?text=${message}`,
-                  "_blank",
-                );
-              } else {
-                setMode("signin");
-              }
-            }}
-          >
-            {mode === "signin" ? "Criar conta" : "Entrar"}
-          </Button>
+        <div className="w-full md:w-7/12 bg-[#25D366] p-12 flex flex-col justify-center text-white relative overflow-hidden">
+          <h2 className="text-4xl font-bold leading-tight mb-4">Seja bem-vindo a Muwoyo</h2>
+          <p className="text-white/80">
+            Faça o seu login para começares a automatizar o teu WhatsApp agora mesmo.
+          </p>
 
-          <div className="mt-7 text-center text-xs text-muted-foreground">
-            © 2026 Muwoyo · suporte@muwoyo.com
+          <div className="mt-12 flex justify-center opacity-80">
+            <svg viewBox="0 0 200 200" className="w-64 h-64 text-white">
+              <circle cx="100" cy="100" r="80" fill="currentColor" fillOpacity="0.1" />
+              <path
+                d="M50 150 Q100 120 150 150"
+                stroke="white"
+                strokeWidth="4"
+                fill="none"
+                strokeLinecap="round"
+              />
+              <rect x="70" y="60" width="60" height="80" rx="10" fill="white" fillOpacity="0.2" />
+            </svg>
           </div>
         </div>
       </div>

@@ -188,9 +188,9 @@ export function PrivacyPolicyViewer() {
                   <p className="mt-2">
                     <strong>Email:</strong> suporte@muwoyo.com
                     <br />
-                    <strong>WhatsApp:</strong> +244 928663898
+                    <strong>WhatsApp:</strong> +244 928 663 898
                     <br />
-                    <strong>Endereço:</strong> Luanda, Angola
+                    <strong>Endereço:</strong> Cabinda, Angola
                   </p>
                 </section>
               </div>

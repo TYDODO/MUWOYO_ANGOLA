@@ -230,7 +230,7 @@ export function TermsOfUseViewer() {
                     Estes Termos de Uso são regidos pela legislação da República
                     de Angola. Qualquer litígio decorrente da utilização da
                     plataforma será submetido aos tribunais competentes de
-                    Luanda, Angola.
+                    Cabinda, Angola.
                   </p>
                 </section>
 

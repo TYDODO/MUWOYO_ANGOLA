@@ -9,7 +9,7 @@ const faqs = [
   {
     question: "A IA consegue entender diferentes sotaques e dialetos?",
     answer:
-      "Sim! Nossa IA é treinada para compreender diversos sotaques e dialetos do português, incluindo variações de Angola, Brasil, Portugal e Moçambique. Ela aprende com cada interação para melhorar ainda mais o atendimento.",
+      "Sim! Nossa IA é treinada para compreender diversos sotaques e dialetos do português, incluindo variações de Angola, Portugal e Moçambique. Ela aprende com cada interação para melhorar ainda mais o atendimento.",
   },
   {
     question: "Posso integrar a Muwoyo com meus sistemas atuais?",
@@ -88,7 +88,7 @@ const FAQSection = () => {
             Ainda tem dúvidas? Entre em contato com nosso suporte
           </p>
           <a
-            href="https://wa.me/5511999999999"
+            href="https://wa.me/244928663898"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-colors"

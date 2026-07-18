@@ -47,7 +47,7 @@ export function PrivacyPolicy({ onAccept, onReject }: PrivacyPolicyProps) {
                 <p>
                   A Muwoyo é uma plataforma de automação de atendimento e vendas
                   via WhatsApp com inteligência artificial, desenvolvida e
-                  operada por Muwoyo Lda., com sede em Luanda, Angola. Para
+                  operada por Muwoyo Lda., com sede em Cabinda, Angola. Para
                   qualquer questão relacionada com esta política, pode
                   contactar-nos através do email suporte@muwoyo.com.
                 </p>

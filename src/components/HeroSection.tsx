@@ -58,10 +58,10 @@ const messagesSequence: Message[] = [
     from: "user",
   },
   {
-    text: "Ótima escolha! 😎 Entregamos em toda Luanda. Antes de finalizar, qual é o seu bairro ou zona para cálculo de entrega?",
+    text: "Ótima escolha! 😎 Atendemos em Cabinda, Angola. Antes de finalizar, introduza a sua hora de funcionamento.",
     from: "bot",
   },
-  { text: "Vivo no Talatona.", from: "user" },
+  { text: "Vivo em Cabinda.", from: "user" },
   {
     text: "Perfeito! O frete sai a 2.000 Kz. Total com desconto: 46.200 Kz.",
     from: "bot",
@@ -199,7 +199,7 @@ export default function HeroSection() {
                   "Olá! Gostaria de saber como a Muwoyo funciona.",
                 );
                 window.open(
-                  `https://wa.me/5511999999999?text=${message}`,
+                  `https://wa.me/244928663898?text=${message}`,
                   "_blank",
                 );
               }}

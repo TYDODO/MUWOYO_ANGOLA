@@ -438,6 +438,7 @@ export type Database = {
           ai_rules: string | null
           avatar_url: string | null
           business_description: string | null
+          business_hours: Json | null
           business_name: string | null
           created_at: string
           created_by: string | null
@@ -459,6 +460,7 @@ export type Database = {
           ai_rules?: string | null
           avatar_url?: string | null
           business_description?: string | null
+          business_hours?: Json | null
           business_name?: string | null
           created_at?: string
           created_by?: string | null
@@ -480,6 +482,7 @@ export type Database = {
           ai_rules?: string | null
           avatar_url?: string | null
           business_description?: string | null
+          business_hours?: Json | null
           business_name?: string | null
           created_at?: string
           created_by?: string | null

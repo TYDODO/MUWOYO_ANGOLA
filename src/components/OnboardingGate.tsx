@@ -28,7 +28,7 @@ const STEPS: Field[] = [
   {
     key: "business_name",
     label: "Qual é o nome da sua empresa?",
-    placeholder: "Ex: Boutique Luanda",
+    placeholder: "Ex: Boutique Cabinda",
     help: "É o nome que a IA vai usar nas conversas.",
   },
   {

@@ -33,7 +33,7 @@ const Footer = () => {
             </Link>
             <p className="text-background/70 text-sm leading-relaxed max-w-xs">
               Automatize seu atendimento e vendas via WhatsApp com inteligência
-              artificial. Deixe a IA trabalhar por você 24/7.
+              artificial. Empresa angolana criada em Cabinda, Angola pela OKAVANGO CODE.
             </p>
             <div className="flex items-center gap-4">
               <a
@@ -136,15 +136,15 @@ const Footer = () => {
               <li className="flex items-center gap-3">
                 <Phone className="w-4 h-4 text-primary" />
                 <a
-                  href="https://wa.me/244999999999"
-                  className="text-background/70 hover:text-primary transition-colors"
-                >
-                  WhatsApp: +244 999 999 999
-                </a>
+                href="https://wa.me/244928663898"
+                className="text-background/70 hover:text-primary transition-colors"
+              >
+                WhatsApp: +244 928 663 898
+              </a>
               </li>
               <li className="flex items-start gap-3">
                 <MapPin className="w-4 h-4 text-primary mt-0.5" />
-                <span className="text-background/70">Luanda, Angola</span>
+                <span className="text-background/70">Cabinda, Angola</span>
               </li>
             </ul>
           </div>

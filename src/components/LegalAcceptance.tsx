@@ -155,7 +155,7 @@ export function LegalAcceptance({
               className="w-full justify-start"
             >
               <Phone className="mr-2 h-4 w-4" />
-              WhatsApp: +244 928663898
+              WhatsApp: +244 928 663 898
             </Button>
           </div>
 
