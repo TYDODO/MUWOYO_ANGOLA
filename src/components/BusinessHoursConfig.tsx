@@ -173,10 +173,21 @@ export default function BusinessHoursConfig({ onSave }: Props) {
       <CardContent>
           <div className="space-y-5">
             <p className="text-sm text-muted-foreground">
-              Selecione os dias em que o estabelecimento funciona e defina um horário padrão que será aplicado a todos os dias selecionados. Para horários específicos por dia, use "Personalizar horários".
+              Ajuste o horário padrão e personalize apenas quando necessário.
             </p>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" onClick={applyCommonTimes} className="hidden md:inline-flex">
+                  Aplicar horário a dias selecionados
+                </Button>
+                <Button onClick={() => setCustomOpen(true)}>
+                  Personalizar horários
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
               {weekDays.map((d) => {
                 const short = d.label.split('-')[0] || d.label;
                 const open = businessHours[d.key].open;
@@ -205,13 +216,17 @@ export default function BusinessHoursConfig({ onSave }: Props) {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 pt-2">
-              <Button variant="outline" onClick={applyCommonTimes}>Aplicar horário a dias selecionados</Button>
-              <Button onClick={() => setCustomOpen(true)}>Personalizar horários</Button>
+            <div className="flex flex-wrap items-center gap-2 pt-2">
+              <Button variant="outline" onClick={applyCommonTimes}>
+                Aplicar horário a dias selecionados
+              </Button>
+              <Button onClick={() => setCustomOpen(true)}>
+                Personalizar horários
+              </Button>
             </div>
 
             <Dialog open={customOpen} onOpenChange={setCustomOpen}>
-              <DialogContent className="sm:max-w-3xl max-h-[70vh] overflow-y-auto">
+              <DialogContent className="sm:max-w-3xl w-full max-h-[80vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Personalizar horários por dia</DialogTitle>
                 </DialogHeader>

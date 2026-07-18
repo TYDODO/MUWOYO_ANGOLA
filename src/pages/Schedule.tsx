@@ -125,7 +125,8 @@ export default function Schedule() {
   }, [rows]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
-  const [viewMode, setViewMode] = useState<"day" | "all" | "history">("day");
+  const [allModalOpen, setAllModalOpen] = useState(false);
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
 
   // calendar should always indicate confirmed upcoming appointments
   const calendarMap = confirmedGroupedByDate;
@@ -155,14 +156,12 @@ export default function Schedule() {
 
   
 
-  const selectedAppointments = useMemo(() => {
-    if (viewMode === "history") return historyItems;
-    if (viewMode === "all") return upcomingConfirmed;
-    // default 'day'
-    return selectedDate ? (confirmedGroupedByDate.get(getDateKey(selectedDate)) || []) : [];
-  }, [viewMode, historyItems, upcomingConfirmed, selectedDate, confirmedGroupedByDate]);
+  const selectedDayAppointments = useMemo(
+    () => (selectedDate ? groupedByDate.get(getDateKey(selectedDate)) || [] : []),
+    [selectedDate, groupedByDate],
+  );
 
-  const displayedAppointments = selectedAppointments;
+  const displayedAppointments = selectedDayAppointments;
 
   const monthStart = startOfMonth(calendarMonth);
   const monthEnd = endOfMonth(calendarMonth);
@@ -177,6 +176,15 @@ export default function Schedule() {
 
   const handleDateSelect = (date: Date) => {
     setSelectedDate(date);
+    setDialogOpen(true);
+  };
+
+  const handleAllOpen = () => {
+    setAllModalOpen(true);
+  };
+
+  const handleHistoryOpen = () => {
+    setHistoryModalOpen(true);
   };
 
   const handleAppointmentClick = (appt: Appt) => {
@@ -214,16 +222,18 @@ export default function Schedule() {
                   </div>
                 </div>
 
-                <div className="mt-4 grid grid-cols-7 gap-2 text-center text-[0.65rem] font-semibold uppercase tracking-[0.24em] text-slate-500">
-                  {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map((day) => (
-                    <div key={day} className="py-2">
-                      {day}
+                <div className="overflow-x-auto rounded-3xl bg-slate-50 p-1">
+                  <div className="min-w-[26rem]">
+                    <div className="grid grid-cols-7 gap-2 text-center text-[0.65rem] font-semibold uppercase tracking-[0.24em] text-slate-500">
+                      {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map((day) => (
+                        <div key={day} className="py-2">
+                          {day}
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
 
-                <div className="mt-4 grid grid-cols-7 gap-2">
-                  {calendarDays.map((date) => {
+                    <div className="mt-3 grid grid-cols-7 gap-2">
+                      {calendarDays.map((date) => {
                     const key = getDateKey(date);
                     const dayAppointments = calendarMap.get(key) || [];
                     const isCurrentMonth = isSameMonth(date, monthStart);
@@ -241,10 +251,10 @@ export default function Schedule() {
                         key={key}
                         type="button"
                         onClick={() => handleDateSelect(date)}
-                        className={`group min-h-[78px] rounded-3xl p-3 text-left transition ${baseStyles} ${!isCurrentMonth ? 'opacity-50' : ''}`}
+                        className={`group aspect-square w-full rounded-3xl p-3 text-left transition ${baseStyles} ${!isCurrentMonth ? 'opacity-50' : ''}`}
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-sm font-semibold">{format(date, 'd')}</span>
+                          <span className="text-base font-semibold leading-none">{format(date, 'd')}</span>
                           {todayFlag && (
                             <span className={`rounded-full px-2 py-0.5 text-[0.65rem] font-semibold ${selected ? 'bg-white/10 text-white/90' : 'bg-emerald-200 text-emerald-900'}`}>
                               Hoje
@@ -264,6 +274,8 @@ export default function Schedule() {
                       </button>
                     );
                   })}
+                    </div>
+                  </div>
                 </div>
               </div>
             </section>
@@ -274,92 +286,81 @@ export default function Schedule() {
                   <div>
                     <p className="flex items-center gap-2 text-xs uppercase tracking-[0.24em] text-slate-600">
                       <History className="h-4 w-4 text-slate-500" />
-                      {viewMode === 'history' ? 'Histórico de agendas' : viewMode === 'all' ? 'Todos agendamentos' : 'Agendamentos confirmados'}
+                      Agenda rápida
                     </p>
                     <h3 className="mt-2 text-xl font-semibold text-slate-950">{selectedDate ? formatDateLabel(selectedDate) : 'Selecione uma data'}</h3>
                   </div>
-                  <div className="flex flex-col items-start gap-3 sm:items-end">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full bg-white px-3 py-1 text-sm font-semibold text-slate-900 shadow-sm">
-                      {displayedAppointments.length} agendamento{displayedAppointments.length === 1 ? '' : 's'}
+                      {selectedDayAppointments.length} agendamento{selectedDayAppointments.length === 1 ? '' : 's'}
                     </span>
-                    <div className="flex items-center gap-2">
-                      <Button variant={viewMode === 'all' ? 'secondary' : 'outline'} size="sm" onClick={() => setViewMode((v) => (v === 'all' ? 'day' : 'all'))}>
-                        Ver todos
-                      </Button>
-                      <Button variant={viewMode === 'history' ? 'secondary' : 'outline'} size="sm" onClick={() => setViewMode((v) => (v === 'history' ? 'day' : 'history'))}>
-                        <History className="mr-2 h-4 w-4" />
-                        Histórico
-                      </Button>
-                      {/* botão de limpeza removido — histórico automático mostra últimos 30 */}
-                    </div>
+                    <Button variant="outline" size="sm" onClick={handleAllOpen}>
+                      Ver todos
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={handleHistoryOpen}>
+                      <History className="mr-2 h-4 w-4" />
+                      Histórico
+                    </Button>
                   </div>
                 </div>
                 <p className="mt-4 text-sm leading-6 text-slate-700">
-                  {viewMode === 'all'
-                    ? 'Aqui estão todos os agendamentos confirmados futuros.'
-                    : viewMode === 'history'
-                    ? 'Últimos 30 históricos (concluídos, cancelados e passados).'
-                    : 'Clique em um dia no calendário para ver apenas os agendamentos desse dia.'}
+                  Clique em um dia no calendário para ver apenas os agendamentos desse dia.
                 </p>
               </div>
 
-              {displayedAppointments.length === 0 ? (
-                <div className="rounded-3xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-                  Nenhum agendamento encontrado.
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {displayedAppointments.map((appt) => (
-                    <button
-                      key={appt.id}
-                      type="button"
-                      className="w-full rounded-3xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
-                      onClick={() => handleAppointmentClick(appt)}
-                    >
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <div className="text-base font-semibold text-slate-950">{appt.service || 'Agendamento'}</div>
-                          <div className="mt-1 text-sm text-slate-700">{appt.customer_name || 'Cliente'}</div>
+              <div className="space-y-4">
+                    {selectedDayAppointments.map((appt) => (
+                      <div key={appt.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="space-y-2">
+                            <div className="text-base font-semibold text-slate-950">{appt.service || 'Agendamento'}</div>
+                            <div className="text-sm font-medium text-slate-800">{formatDateLabel(new Date(appt.scheduled_at || ''))} • {formatTimeLabel(appt.scheduled_at)}</div>
+                            <div className="text-sm text-slate-700">{appt.customer_name || 'Cliente'}</div>
+                          </div>
+                          <span
+                            className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+                              appt.status === 'canceled'
+                                ? 'bg-red-100 text-red-800'
+                                : statusStyles[appt.status] ?? statusStyles.default
+                            }`}
+                          >
+                            {statusLabel[appt.status] ?? appt.status}
+                          </span>
                         </div>
-                        <span
-                          className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
-                            appt.status === 'canceled'
-                              ? 'bg-red-100 text-red-800'
-                              : statusStyles[appt.status] ?? statusStyles.default
-                          }`}
-                        >
-                          {statusLabel[appt.status] ?? appt.status}
-                        </span>
+                        {appt.description && (
+                          <div className="mt-3 rounded-2xl bg-slate-950/5 p-4 text-sm text-slate-800">
+                            {appt.description}
+                          </div>
+                        )}
                       </div>
-                      <div className="mt-3 flex flex-wrap items-center justify-between gap-4 text-sm text-slate-800">
-                        <span>{formatTimeLabel(appt.scheduled_at)}</span>
-                        <span>{appt.customer_phone || 'Sem telefone'}</span>
+                    ))}
+                    {selectedDayAppointments.length === 0 && (
+                      <div className="rounded-3xl border border-dashed border-border p-8 text-center text-sm text-slate-500">
+                        Seleciona uma data para ver os agendamentos desse dia.
                       </div>
-                    </button>
-                  ))}
-                </div>
-              )}
+                    )}
+                  </div>
             </section>
           </CardContent>
         </Card>
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-3xl">
+        <DialogContent className="sm:max-w-3xl max-w-full max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Agendamentos para {selectedDate ? formatDateLabel(selectedDate) : "data selecionada"}</DialogTitle>
             <DialogDescription>
-              {selectedAppointments.length} agendamento{selectedAppointments.length === 1 ? "" : "s"} neste dia.
+              {selectedDayAppointments.length} agendamento{selectedDayAppointments.length === 1 ? "" : "s"} neste dia.
             </DialogDescription>
           </DialogHeader>
 
-          {selectedAppointments.length === 0 ? (
+          {selectedDayAppointments.length === 0 ? (
             <div className="rounded-3xl border border-border p-6 text-center text-sm text-muted-foreground">
               Nenhum agendamento encontrado para esta data.
             </div>
           ) : (
             <Accordion type="single" collapsible className="space-y-4">
-              {selectedAppointments.map((appt) => (
+              {selectedDayAppointments.map((appt) => (
                 <AccordionItem key={appt.id} value={appt.id} className="rounded-3xl border border-border bg-background">
                   <AccordionTrigger className="px-4 py-4">
                     <div className="flex items-center justify-between gap-3">
@@ -367,7 +368,7 @@ export default function Schedule() {
                         <div className="font-semibold text-slate-900">
                           {appt.service || "Agendamento"}
                         </div>
-                        <div className="text-sm text-muted-foreground">
+                        <div className="text-sm text-slate-700">
                           {appt.customer_name || "Cliente"}
                         </div>
                       </div>
@@ -384,20 +385,20 @@ export default function Schedule() {
                   </AccordionTrigger>
                   <AccordionContent className="px-4 pb-4">
                     <div className="grid gap-3">
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-2 text-sm text-slate-800">
                         <User className="h-4 w-4" />
                         {appt.customer_name || "-"}
                       </div>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-2 text-sm text-slate-800">
                         <Phone className="h-4 w-4" />
                         +{appt.customer_phone || "-"}
                       </div>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-2 text-sm text-slate-800">
                         <Clock className="h-4 w-4" />
-                        {formatTimeLabel(appt.scheduled_at)}
+                        {formatDateLabel(new Date(appt.scheduled_at || ""))} • {formatTimeLabel(appt.scheduled_at)}
                       </div>
                       {appt.description && (
-                        <div className="rounded-2xl bg-slate-950/5 p-4 text-sm text-slate-700">
+                        <div className="rounded-2xl bg-slate-950/5 p-4 text-sm text-slate-800">
                           {appt.description}
                         </div>
                       )}
@@ -412,6 +413,66 @@ export default function Schedule() {
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
               Fechar
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={allModalOpen} onOpenChange={setAllModalOpen}>
+        <DialogContent className="sm:max-w-3xl max-w-full max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Todos os agendamentos confirmados</DialogTitle>
+            <DialogDescription>{upcomingConfirmed.length} agendamento{upcomingConfirmed.length === 1 ? "" : "s"} confirmados futuros.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            {upcomingConfirmed.map((appt) => (
+              <div key={appt.id} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <div className="text-base font-semibold text-slate-950">{appt.service || 'Agendamento'}</div>
+                    <div className="text-sm font-medium text-slate-800">{formatDateLabel(new Date(appt.scheduled_at || ''))} • {formatTimeLabel(appt.scheduled_at)}</div>
+                    <div className="text-sm text-slate-700">{appt.customer_name || 'Cliente'}</div>
+                  </div>
+                  <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${statusStyles[appt.status] ?? statusStyles.default}`}>
+                    {statusLabel[appt.status] ?? appt.status}
+                  </span>
+                </div>
+                {appt.description && <div className="mt-3 rounded-2xl bg-slate-950/5 p-4 text-sm text-slate-800">{appt.description}</div>}
+              </div>
+            ))}
+            {upcomingConfirmed.length === 0 && <div className="rounded-3xl border border-dashed border-border p-8 text-center text-sm text-slate-500">Nenhum agendamento confirmado futuro encontrado.</div>}
+          </div>
+          <div className="mt-6 flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setAllModalOpen(false)}>Fechar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={historyModalOpen} onOpenChange={setHistoryModalOpen}>
+        <DialogContent className="sm:max-w-3xl max-w-full max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Histórico de agendamentos</DialogTitle>
+            <DialogDescription>{historyItems.length} agendamento{historyItems.length === 1 ? "" : "s"} recentes.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            {historyItems.map((appt) => (
+              <div key={appt.id} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <div className="text-base font-semibold text-slate-950">{appt.service || 'Agendamento'}</div>
+                    <div className="text-sm font-medium text-slate-800">{formatDateLabel(new Date(appt.scheduled_at || ''))} • {formatTimeLabel(appt.scheduled_at)}</div>
+                    <div className="text-sm text-slate-700">{appt.customer_name || 'Cliente'}</div>
+                  </div>
+                  <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${statusStyles[appt.status] ?? statusStyles.default}`}>
+                    {statusLabel[appt.status] ?? appt.status}
+                  </span>
+                </div>
+                {appt.description && <div className="mt-3 rounded-2xl bg-slate-950/5 p-4 text-sm text-slate-800">{appt.description}</div>}
+              </div>
+            ))}
+            {historyItems.length === 0 && <div className="rounded-3xl border border-dashed border-border p-8 text-center text-sm text-slate-500">Nenhum histórico encontrado.</div>}
+          </div>
+          <div className="mt-6 flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setHistoryModalOpen(false)}>Fechar</Button>
           </div>
         </DialogContent>
       </Dialog>
