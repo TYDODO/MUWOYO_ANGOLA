@@ -9,7 +9,7 @@ import NotificationBell from "@/components/NotificationBell";
 import ProfileSheet from "@/components/ProfileSheet";
 import logo from "@/assets/muwoyo-logo.png";
 
-const adminItems = [{ title: "Dashboard", to: "/admin", icon: BarChart3 }, { title: "Tokens", to: "/admin?tab=tokens", icon: Coins }, { title: "Usuários", to: "/admin?tab=users", icon: Users }, { title: "Subadmins", to: "/admin?tab=subadmins", icon: Shield }, { title: "Notificações", to: "/admin?tab=notifications", icon: Bell }];
+const adminItems = [{ title: "Dashboard", to: "/admin", icon: BarChart3 }, { title: "Tokens", to: "/admin/tokens", icon: Coins }, { title: "Usuários", to: "/admin?tab=users", icon: Users }, { title: "Subadmins", to: "/admin?tab=subadmins", icon: Shield }, { title: "Notificações", to: "/admin?tab=notifications", icon: Bell }];
 const subItems = [{ title: "Dashboard", to: "/gestor", icon: BarChart3 }, { title: "Cadastrar usuário", to: "/gestor?tab=create", icon: UserPlus }, { title: "Meus usuários", to: "/gestor?tab=users", icon: Users }, { title: "Mensagem ao Admin", to: "/gestor?tab=notify", icon: Bell }];
 
 function Side({ mode }: { mode: "admin" | "sub" }) {

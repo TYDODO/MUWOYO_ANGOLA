@@ -20,6 +20,7 @@ import MessageTopUp from "./pages/MessageTopUp";
 import Orders from "./pages/Orders";
 import Schedule from "./pages/Schedule";
 import AdminDashboard from "./pages/AdminDashboard";
+import AdminTokens from "./pages/AdminTokens";
 import SubAdminDashboard from "./pages/SubAdminDashboard";
 import NotFound from "./pages/NotFound.tsx";
 import LandingPageMWY from "../LandingPageMWY";
@@ -70,6 +71,14 @@ const App = () => (
               element={
                 <RoleRoute allow={["admin"]}>
                   <AdminDashboard />
+                </RoleRoute>
+              }
+            />
+            <Route
+              path="/admin/tokens"
+              element={
+                <RoleRoute allow={["admin"]}>
+                  <AdminTokens />
                 </RoleRoute>
               }
             />

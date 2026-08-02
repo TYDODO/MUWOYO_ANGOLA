@@ -244,8 +244,26 @@ export default function BusinessHoursConfig({ onSave }: Props) {
                         </div>
 
                         <div className="mt-3 grid gap-2 md:grid-cols-2">
-                          <Input placeholder="08:00" value={schedule.start_time} disabled={!schedule.open} onChange={(e) => updateDay(day.key, { start_time: e.target.value })} />
-                          <Input placeholder="18:00" value={schedule.end_time} disabled={!schedule.open} onChange={(e) => updateDay(day.key, { end_time: e.target.value })} />
+                          <div className="grid grid-cols-2 gap-2">
+                            <Input placeholder="Hora" value={schedule.start_time?.split(":")[0] || ""} disabled={!schedule.open} onChange={(e) => {
+                              const currentMinutes = schedule.start_time?.split(":")[1] || "00";
+                              updateDay(day.key, { start_time: `${e.target.value.padStart(2, "0")}:${currentMinutes}` });
+                            }} />
+                            <Input placeholder="Minuto" value={schedule.start_time?.split(":")[1] || ""} disabled={!schedule.open} onChange={(e) => {
+                              const currentHour = schedule.start_time?.split(":")[0] || "08";
+                              updateDay(day.key, { start_time: `${currentHour}:${e.target.value.padStart(2, "0")}` });
+                            }} />
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <Input placeholder="Hora" value={schedule.end_time?.split(":")[0] || ""} disabled={!schedule.open} onChange={(e) => {
+                              const currentMinutes = schedule.end_time?.split(":")[1] || "00";
+                              updateDay(day.key, { end_time: `${e.target.value.padStart(2, "0")}:${currentMinutes}` });
+                            }} />
+                            <Input placeholder="Minuto" value={schedule.end_time?.split(":")[1] || ""} disabled={!schedule.open} onChange={(e) => {
+                              const currentHour = schedule.end_time?.split(":")[0] || "18";
+                              updateDay(day.key, { end_time: `${currentHour}:${e.target.value.padStart(2, "0")}` });
+                            }} />
+                          </div>
                         </div>
                       </div>
                     );
