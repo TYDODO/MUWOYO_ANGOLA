@@ -92,22 +92,29 @@ export default function BusinessHoursConfig({ onSave }: Props) {
           return toast({ title: "Erro", description: error.message, variant: "destructive" });
         }
         if (data?.business_hours) {
-          setBusinessHours(normalizeBusinessHours(data.business_hours));
-          // initialize common times from first open day
-          const firstOpen = Object.values(normalizeBusinessHours(data.business_hours)).find((d) => d.open);
-          if (firstOpen) {
-            setCommonStart(firstOpen.start_time || "");
-            setCommonEnd(firstOpen.end_time || "");
-          }
+          const normalized = normalizeBusinessHours(data.business_hours);
+          setBusinessHours(normalized);
+          syncCommonTimes(normalized);
         }
       });
   }, [user, toast]);
 
   const updateDay = (day: DayKey, values: Partial<DaySchedule>) => {
-    setBusinessHours((current) => ({
-      ...current,
-      [day]: { ...current[day], ...values },
-    }));
+    setBusinessHours((current) => {
+      const next = {
+        ...current,
+        [day]: { ...current[day], ...values },
+      };
+      return next;
+    });
+  };
+
+  const syncCommonTimes = (nextHours: BusinessHours) => {
+    const firstOpen = Object.values(nextHours).find((d) => d.open);
+    if (firstOpen) {
+      setCommonStart(firstOpen.start_time || "");
+      setCommonEnd(firstOpen.end_time || "");
+    }
   };
 
   const toggleDay = (day: DayKey) => {
