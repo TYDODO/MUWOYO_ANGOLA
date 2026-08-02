@@ -13,9 +13,11 @@ import {
   Coins,
   MessageSquarePlus,
   Shield,
+  Sparkles,
   Trash2,
   UserPlus,
   Users,
+  Wallet,
 } from "lucide-react";
 import AdminShell from "@/components/AdminShell";
 import { Button } from "@/components/ui/button";
@@ -83,6 +85,7 @@ export default function AdminDashboard() {
   });
   const [edit, setEdit] = useState<Row | null>(null);
   const [msg, setMsg] = useState({ userId: "", amount: "" });
+  const [tokenBalances, setTokenBalances] = useState<any[]>([]);
   const load = async () => {
     const { data: profiles } = await sb
       .from("profiles")
@@ -99,8 +102,37 @@ export default function AdminDashboard() {
     setUsers(rows.filter((r: Row) => r.role === "client"));
     setSubs(rows.filter((r: Row) => r.role === "sub_admin"));
   };
+  const loadTokenBalances = async () => {
+    const { data, error } = await sb
+      .from("v_ai_user_balance_dashboard")
+      .select("user_id,total_depositado_usd,total_gasto_usd,saldo_atual_usd,mensagens_restantes_estimadas")
+      .order("saldo_atual_usd", { ascending: false });
+
+    if (error) {
+      console.warn("Failed to load AI balance overview", error);
+      return;
+    }
+
+    const rows = await Promise.all((data || []).map(async (row: any) => {
+      const { data: profile } = await sb
+        .from("profiles")
+        .select("full_name,business_name")
+        .eq("user_id", row.user_id)
+        .maybeSingle();
+
+      return {
+        ...row,
+        full_name: profile?.full_name || "Usuário sem nome",
+        business_name: profile?.business_name || "-",
+      };
+    }));
+
+    setTokenBalances(rows);
+  };
+
   useEffect(() => {
     load();
+    loadTokenBalances();
   }, []);
   const filtered = users
     .filter((u) =>
@@ -277,6 +309,11 @@ export default function AdminDashboard() {
           label="Ganhos totais"
           value={`${(users.length * 22500).toLocaleString("pt-AO")} Kz`}
           icon={<Coins />}
+        />
+        <Stat
+          label="Saldo IA"
+          value={`${tokenBalances.reduce((sum, row) => sum + Number(row.saldo_atual_usd || 0), 0).toFixed(2)} USD`}
+          icon={<Sparkles />}
         />
         <Stat
           label="Mensagens vendidas"

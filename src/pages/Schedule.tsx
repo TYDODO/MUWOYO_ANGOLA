@@ -95,8 +95,11 @@ export default function Schedule() {
   };
 
   useEffect(() => {
-    load();
     if (!user) return;
+
+    void supabase.rpc("update_expired_appointments").catch(() => undefined);
+    void load();
+
     const channel = supabase
       .channel(`appts-${user.id}`)
       .on(
