@@ -27,6 +27,11 @@ const json = (data: unknown, status = 200) =>
  *   external_message_id?: string,
  *   queue_id?: uuid,
  *   ai_messages_count?: number  // how many messages the AI actually sent (default 1)
+ *   model_id?: string
+ *   prompt_tokens?: number
+ *   completion_tokens?: number
+ *   workflow_name?: string
+ *   workflow_id?: string
  * }
  */
 Deno.serve(async (req) => {
@@ -55,6 +60,32 @@ Deno.serve(async (req) => {
       external_id: body.external_message_id || null,
       ai_responded: true,
     });
+
+    const aiModelId = body.model_id as string | undefined;
+    const promptTokens = Math.max(0, Number(body.prompt_tokens || 0));
+    const completionTokens = Math.max(0, Number(body.completion_tokens || 0));
+    const totalTokens = promptTokens + completionTokens;
+    const usageCost = await admin.rpc("calculate_usage_cost", {
+      p_model_id: aiModelId,
+      p_prompt_tokens: promptTokens,
+      p_completion_tokens: completionTokens,
+    });
+
+    if (aiModelId && (promptTokens > 0 || completionTokens > 0)) {
+      await admin.from("ai_usage_events").insert({
+        user_id: userId,
+        execution_id: body.external_message_id || body.queue_id || null,
+        workflow_name: body.workflow_name || "n8n-callback",
+        workflow_id: body.workflow_id || null,
+        model_id: aiModelId,
+        prompt_tokens: promptTokens,
+        completion_tokens: completionTokens,
+        total_tokens: totalTokens,
+        cost_usd: Number(usageCost.data || 0),
+      });
+    }
+
+    await admin.rpc("recalculate_all_user_ai_balances");
 
     // Atomically increment messages_received by `count`
     const { data: profile } = await admin

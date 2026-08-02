@@ -12,6 +12,7 @@ import {
   Ban,
   Coins,
   MessageSquarePlus,
+  RefreshCw,
   Shield,
   Sparkles,
   Trash2,
@@ -86,6 +87,11 @@ export default function AdminDashboard() {
   const [edit, setEdit] = useState<Row | null>(null);
   const [msg, setMsg] = useState({ userId: "", amount: "" });
   const [tokenBalances, setTokenBalances] = useState<any[]>([]);
+  const [depositForm, setDepositForm] = useState({
+    userId: "",
+    amount: "",
+    description: "",
+  });
   const load = async () => {
     const { data: profiles } = await sb
       .from("profiles")
@@ -128,6 +134,73 @@ export default function AdminDashboard() {
     }));
 
     setTokenBalances(rows);
+  };
+  const handleRegisterDeposit = async (e?: FormEvent) => {
+    e?.preventDefault();
+    const userId = depositForm.userId;
+    const amount = Number(depositForm.amount);
+    if (!userId || !amount || amount <= 0) {
+      toast({
+        title: "Dados inválidos",
+        description: "Escolha um utilizador e indique um valor maior que zero.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const { error } = await sb
+      .from("user_ai_deposits")
+      .insert({
+        user_id: userId,
+        amount_usd: amount,
+        description: depositForm.description || "Depósito manual do admin",
+        created_by: (await sb.auth.getUser()).data.user?.id,
+      });
+
+    if (error) {
+      console.warn("Deposit insert failed", error);
+      toast({
+        title: "Erro ao registrar depósito",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const { error: rpcError } = await sb.rpc(
+      "recalculate_all_user_ai_balances",
+    );
+
+    if (rpcError) {
+      console.warn("Balance recalc failed", rpcError);
+      toast({
+        title: "Depósito gravado",
+        description: "Mas o recalculo imediato falhou.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "Depósito registado",
+      description: `USD ${amount.toFixed(2)} atribuídos ao utilizador.`,
+    });
+    setDepositForm({ userId: "", amount: "", description: "" });
+    await loadTokenBalances();
+  };
+  const handleRecalculateBalances = async () => {
+    const { error } = await sb.rpc("recalculate_all_user_ai_balances");
+    if (error) {
+      console.warn("Balance recalc failed", error);
+      toast({
+        title: "Erro ao recalcular",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+    await loadTokenBalances();
+    toast({ title: "Saldos recalculados", description: "Dados atualizados." });
   };
 
   useEffect(() => {
@@ -494,6 +567,92 @@ export default function AdminDashboard() {
         }
         onDelete={(u) => call({ action: "deleteUser", userId: u.user_id })}
       />
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
+          <CardTitle>Saldo IA por utilizador</CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRecalculateBalances}
+          >
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Recalcular saldos
+          </Button>
+        </CardHeader>
+        <CardContent className="grid gap-4 lg:grid-cols-[1.3fr_0.9fr]">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {tokenBalances.map((row) => (
+              <div
+                key={row.user_id}
+                className="rounded-lg border bg-card p-3 shadow-sm"
+              >
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div>
+                    <div className="font-medium">{row.full_name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {row.business_name}
+                    </div>
+                  </div>
+                  <Wallet className="h-4 w-4 text-primary" />
+                </div>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Depositado</span>
+                    <span>{Number(row.total_depositado_usd || 0).toFixed(2)} USD</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Gasto</span>
+                    <span>{Number(row.total_gasto_usd || 0).toFixed(2)} USD</span>
+                  </div>
+                  <div className="flex justify-between font-semibold">
+                    <span>Saldo</span>
+                    <span>{Number(row.saldo_atual_usd || 0).toFixed(2)} USD</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Estimativa</span>
+                    <span>{row.mensagens_restantes_estimadas ?? 0}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <form className="space-y-3 rounded-lg border p-4" onSubmit={handleRegisterDeposit}>
+            <div className="text-sm font-semibold">Registrar depósito USD</div>
+            <Select
+              value={depositForm.userId}
+              onValueChange={(value) => setDepositForm({ ...depositForm, userId: value })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Escolher utilizador" />
+              </SelectTrigger>
+              <SelectContent>
+                {allUsersForSelect.map((u) => (
+                  <SelectItem key={u.user_id} value={u.user_id}>
+                    {u.full_name || u.business_name || u.phone || u.user_id.slice(0, 8)} ({u.role})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="Valor em USD"
+              value={depositForm.amount}
+              onChange={(e) => setDepositForm({ ...depositForm, amount: e.target.value })}
+            />
+            <Textarea
+              placeholder="Descrição do depósito"
+              value={depositForm.description}
+              onChange={(e) => setDepositForm({ ...depositForm, description: e.target.value })}
+            />
+            <Button type="submit" className="w-full">
+              <Wallet className="mr-2 h-4 w-4" />
+              Gravar depósito
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <CardTitle>Enviar notificação em massa</CardTitle>
