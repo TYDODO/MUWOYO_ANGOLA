@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { Bell, Check, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -50,7 +51,17 @@ export default function NotificationBell() {
                 {!n.is_read && <Button size="icon" variant="ghost" onClick={() => markRead(n.id)}><Check className="h-4 w-4" /></Button>}
               </div>
               {n.image_url && <img src={n.image_url} alt={n.title} className="max-h-32 rounded-md object-cover" />}
-              {n.link && <a href={n.link} target={n.link.startsWith("http") ? "_blank" : "_self"} className="inline-flex items-center gap-1 text-sm font-medium text-primary"><ExternalLink className="h-3.5 w-3.5" /> Abrir</a>}
+              {n.link && (
+                n.link.startsWith("http") ? (
+                  <a href={n.link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm font-medium text-primary" onClick={() => markRead(n.id)}>
+                    <ExternalLink className="h-3.5 w-3.5" /> Abrir
+                  </a>
+                ) : (
+                  <Link to={n.link} className="inline-flex items-center gap-1 text-sm font-medium text-primary" onClick={() => markRead(n.id)}>
+                    <ExternalLink className="h-3.5 w-3.5" /> Abrir
+                  </Link>
+                )
+              )}
             </div>
           ))}
           {items.length === 0 && <div className="p-6 text-sm text-muted-foreground">Nenhuma notificação.</div>}

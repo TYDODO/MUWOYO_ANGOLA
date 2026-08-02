@@ -28,21 +28,46 @@ export default function BusinessInfo() {
 
   useEffect(() => {
     if (!user) return;
-    supabase.from("profiles")
-      .select("business_name, ai_name, ai_personality, business_description, ai_rules, appointment_duration_minutes, accepts_appointments")
-      .eq("user_id", user.id)
-      .maybeSingle()
-      .then(({ data }: any) => {
-        if (data) setForm({
+
+    const loadProfile = async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("business_name, ai_name, business_description, ai_rules")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (error) {
+        console.warn("Falling back to legacy profile load", error);
+        return;
+      }
+
+      if (data) {
+        setForm((current) => ({
+          ...current,
           business_name: data.business_name || "",
           ai_name: data.ai_name || "",
-          ai_personality: data.ai_personality || "",
           business_description: data.business_description || "",
           ai_rules: data.ai_rules || "",
-          appointment_duration_minutes: Number(data.appointment_duration_minutes ?? 30),
-          accepts_appointments: data.accepts_appointments ?? true,
-        });
-      });
+        }));
+      }
+
+      const { data: extra, error: extraError } = await supabase
+        .from("profiles")
+        .select("ai_personality, appointment_duration_minutes, accepts_appointments")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (!extraError && extra) {
+        setForm((current) => ({
+          ...current,
+          ai_personality: extra.ai_personality || "",
+          appointment_duration_minutes: Number(extra.appointment_duration_minutes ?? 30),
+          accepts_appointments: extra.accepts_appointments ?? true,
+        }));
+      }
+    };
+
+    void loadProfile();
   }, [user]);
 
   const save = async (businessHours?: any) => {
