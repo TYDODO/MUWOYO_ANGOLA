@@ -209,19 +209,19 @@ export default function AdminTokens() {
 
   return (
     <AdminShell mode="admin" title="Gerenciamento de Tokens & Saldo">
-      <Card className="border border-border/60 bg-[#0B0F17] text-white shadow-none">
+      <Card className="border border-border/60 bg-background text-foreground shadow-sm">
         <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <CardTitle className="text-2xl font-semibold text-white">
+            <CardTitle className="text-2xl font-semibold text-foreground">
               Gerenciamento de Tokens & Saldo
             </CardTitle>
-            <p className="mt-1 text-sm text-slate-400">
+            <p className="mt-1 text-sm text-muted-foreground">
               Selecione um utilizador e acompanhe o saldo disponível em USD, o consumo e os custos por execução.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Select value={selectedUserId} onValueChange={setSelectedUserId}>
-              <SelectTrigger className="w-full min-w-[280px] border-slate-700 bg-[#161C24] text-white">
+              <SelectTrigger className="w-full min-w-[280px] border-border bg-background text-foreground">
                 <SelectValue placeholder="Selecionar usuário" />
               </SelectTrigger>
               <SelectContent>
@@ -240,42 +240,42 @@ export default function AdminTokens() {
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-xl border border-slate-800 bg-[#161C24] p-4">
-              <div className="text-sm text-slate-400">Total Depositado</div>
-              <div className="mt-2 text-2xl font-semibold text-emerald-400">
+            <div className="rounded-xl border border-border bg-card p-4">
+              <div className="text-sm text-muted-foreground">Total Depositado</div>
+              <div className="mt-2 text-2xl font-semibold text-emerald-600">
                 {Number(selectedBalance.total_depositado_usd || 0).toFixed(2)} USD
               </div>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-[#161C24] p-4">
-              <div className="text-sm text-slate-400">Total Gasto</div>
-              <div className="mt-2 text-2xl font-semibold text-amber-400">
+            <div className="rounded-xl border border-border bg-card p-4">
+              <div className="text-sm text-muted-foreground">Total Gasto</div>
+              <div className="mt-2 text-2xl font-semibold text-amber-600">
                 {Number(selectedBalance.total_gasto_usd || 0).toFixed(2)} USD
               </div>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-[#161C24] p-4">
-              <div className="text-sm text-slate-400">Saldo Restante</div>
-              <div className="mt-2 text-2xl font-semibold text-emerald-300">
+            <div className="rounded-xl border border-border bg-card p-4">
+              <div className="text-sm text-muted-foreground">Saldo Restante</div>
+              <div className="mt-2 text-2xl font-semibold text-emerald-700">
                 {Number(selectedBalance.saldo_atual_usd || 0).toFixed(2)} USD
               </div>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-[#161C24] p-4">
-              <div className="text-sm text-slate-400">Estimativa de Mensagens</div>
-              <div className="mt-2 text-2xl font-semibold text-sky-300">
+            <div className="rounded-xl border border-border bg-card p-4">
+              <div className="text-sm text-muted-foreground">Estimativa de Mensagens</div>
+              <div className="mt-2 text-2xl font-semibold text-sky-700">
                 {selectedBalance.mensagens_restantes_estimadas ?? 0}
               </div>
             </div>
           </div>
 
           <div className="grid gap-4 xl:grid-cols-[1.35fr_0.9fr]">
-            <div className="rounded-xl border border-slate-800 bg-[#161C24] p-4">
+            <div className="rounded-xl border border-border bg-card p-4">
               <div className="mb-3 flex items-center justify-between">
-                <div className="text-lg font-semibold text-white">Histórico de Consumo de IA</div>
-                <div className="text-xs text-slate-400">Últimas 25 execuções</div>
+                <div className="text-lg font-semibold text-foreground">Histórico de Consumo de IA</div>
+                <div className="text-xs text-muted-foreground">Últimas 25 execuções</div>
               </div>
               <div className="overflow-auto">
                 <table className="w-full min-w-[700px] text-sm">
                   <thead>
-                    <tr className="border-b border-slate-800 text-left text-slate-400">
+                    <tr className="border-b border-border text-left text-muted-foreground">
                       <th className="pb-3">Data / Hora</th>
                       <th className="pb-3">Workflow</th>
                       <th className="pb-3">Modelo</th>
@@ -287,23 +287,23 @@ export default function AdminTokens() {
                   <tbody>
                     {tokenUsageRows.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="py-6 text-center text-slate-400">
+                        <td colSpan={6} className="py-6 text-center text-muted-foreground">
                           Sem eventos de uso para este utilizador ainda.
                         </td>
                       </tr>
                     ) : (
                       tokenUsageRows.map((row) => (
-                        <tr key={row.id} className="border-b border-slate-900 last:border-0">
-                          <td className="py-3 text-slate-300">
+                        <tr key={row.id} className="border-b border-border last:border-0">
+                          <td className="py-3 text-foreground">
                             {new Date(row.created_at).toLocaleString("pt-AO")}
                           </td>
-                          <td className="py-3 text-slate-300">
+                          <td className="py-3 text-foreground">
                             {row.workflow_name || row.workflow_id || "n8n"}
                           </td>
-                          <td className="py-3 text-slate-300">{row.model_id || "-"}</td>
-                          <td className="py-3 text-slate-300">{row.prompt_tokens || 0}</td>
-                          <td className="py-3 text-slate-300">{row.completion_tokens || 0}</td>
-                          <td className="py-3 text-emerald-300">
+                          <td className="py-3 text-foreground">{row.model_id || "-"}</td>
+                          <td className="py-3 text-foreground">{row.prompt_tokens || 0}</td>
+                          <td className="py-3 text-foreground">{row.completion_tokens || 0}</td>
+                          <td className="py-3 text-emerald-700">
                             ${Number(row.cost_usd || 0).toFixed(4)}
                           </td>
                         </tr>
@@ -314,16 +314,16 @@ export default function AdminTokens() {
               </div>
             </div>
 
-            <div className="space-y-4 rounded-xl border border-slate-800 bg-[#161C24] p-4">
-              <div className="text-lg font-semibold text-white">Custos de Modelo</div>
+            <div className="space-y-4 rounded-xl border border-border bg-card p-4">
+              <div className="text-lg font-semibold text-foreground">Custos de Modelo</div>
               <div className="space-y-3">
-                <Label className="text-slate-300">Modelo</Label>
+                <Label className="text-foreground">Modelo</Label>
                 <Input
                   placeholder="Modelo (ex.: gpt-4o)"
                   value={modelSettings.model_name}
                   onChange={(e) => setModelSettings({ ...modelSettings, model_name: e.target.value })}
                 />
-                <Label className="text-slate-300">Input / 1M tokens (USD)</Label>
+                <Label className="text-foreground">Input / 1M tokens (USD)</Label>
                 <Input
                   type="number"
                   min="0"
@@ -332,7 +332,7 @@ export default function AdminTokens() {
                   value={modelSettings.input_cost_per_1m_usd}
                   onChange={(e) => setModelSettings({ ...modelSettings, input_cost_per_1m_usd: e.target.value })}
                 />
-                <Label className="text-slate-300">Output / 1M tokens (USD)</Label>
+                <Label className="text-foreground">Output / 1M tokens (USD)</Label>
                 <Input
                   type="number"
                   min="0"
@@ -341,7 +341,7 @@ export default function AdminTokens() {
                   value={modelSettings.output_cost_per_1m_usd}
                   onChange={(e) => setModelSettings({ ...modelSettings, output_cost_per_1m_usd: e.target.value })}
                 />
-                <Label className="text-slate-300">Média de tokens / mensagem</Label>
+                <Label className="text-foreground">Média de tokens / mensagem</Label>
                 <Input
                   type="number"
                   min="0"
@@ -378,13 +378,13 @@ export default function AdminTokens() {
                 </Button>
               </div>
 
-              <form className="mt-5 space-y-3 rounded-lg border border-slate-800 bg-[#111723] p-4" onSubmit={handleRegisterDeposit}>
-                <div className="text-sm font-semibold text-white">Recarga de Saldo em USD</div>
+              <form className="mt-5 space-y-3 rounded-lg border border-border bg-background p-4" onSubmit={handleRegisterDeposit}>
+                <div className="text-sm font-semibold text-foreground">Recarga de Saldo em USD</div>
                 <Select
                   value={depositForm.userId || selectedUserId}
                   onValueChange={(value) => setDepositForm({ ...depositForm, userId: value })}
                 >
-                  <SelectTrigger className="border-slate-700 bg-[#161C24] text-white">
+                  <SelectTrigger className="border-border bg-background text-foreground">
                     <SelectValue placeholder="Escolher utilizador" />
                   </SelectTrigger>
                   <SelectContent>

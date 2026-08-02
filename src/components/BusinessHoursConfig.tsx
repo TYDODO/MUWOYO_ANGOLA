@@ -44,6 +44,8 @@ const defaultBusinessHours: BusinessHours = weekDays.reduce(
   {} as BusinessHours,
 );
 
+const BUSINESS_HOURS_DRAFT_KEY = "muwoyo-business-hours-draft";
+
 const normalizeBusinessHours = (value: unknown): BusinessHours => {
   if (!value || typeof value !== "object") return defaultBusinessHours;
   const payload = value as Record<string, unknown>;
@@ -76,6 +78,34 @@ export default function BusinessHoursConfig({ onSave }: Props) {
   const [commonStart, setCommonStart] = useState("");
   const [commonEnd, setCommonEnd] = useState("");
   const [customOpen, setCustomOpen] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const cached = window.localStorage.getItem(BUSINESS_HOURS_DRAFT_KEY);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (parsed?.businessHours) {
+            const normalized = normalizeBusinessHours(parsed.businessHours);
+            setBusinessHours(normalized);
+            syncCommonTimes(normalized);
+          }
+          if (typeof parsed?.commonStart === "string") setCommonStart(parsed.commonStart);
+          if (typeof parsed?.commonEnd === "string") setCommonEnd(parsed.commonEnd);
+        } catch {
+          window.localStorage.removeItem(BUSINESS_HOURS_DRAFT_KEY);
+        }
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(
+      BUSINESS_HOURS_DRAFT_KEY,
+      JSON.stringify({ businessHours, commonStart, commonEnd }),
+    );
+  }, [businessHours, commonStart, commonEnd]);
 
   useEffect(() => {
     if (!user) return;
@@ -168,6 +198,10 @@ export default function BusinessHoursConfig({ onSave }: Props) {
       return toast({ title: "Erro", description: result.error.message || "Erro ao guardar.", variant: "destructive" });
     }
 
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(BUSINESS_HOURS_DRAFT_KEY);
+    }
+
     toast({ title: "Guardado", description: "Horários de funcionamento atualizados." });
   };
 
@@ -206,17 +240,53 @@ export default function BusinessHoursConfig({ onSave }: Props) {
             <div className="grid gap-3 md:grid-cols-2">
               <div className="space-y-2">
                 <Label>Hora de início padrão (24h)</Label>
-                <Input value={commonStart} placeholder="08:00" onChange={(e) => setCommonStart(e.target.value)} />
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={23}
+                    value={commonStart.split(":")[0] || ""}
+                    onChange={(e) => setCommonStart(`${String(e.target.value || "00").padStart(2, "0")}:${commonStart.split(":")[1] || "00"}`)}
+                    className="w-16"
+                  />
+                  <span className="text-sm text-muted-foreground">:</span>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={59}
+                    value={commonStart.split(":")[1] || ""}
+                    onChange={(e) => setCommonStart(`${commonStart.split(":")[0] || "08"}:${String(e.target.value || "00").padStart(2, "0")}`)}
+                    className="w-16"
+                  />
+                </div>
                 <p className="text-xs text-muted-foreground">Hora aplicada a todos os dias selecionados.</p>
               </div>
               <div className="space-y-2">
                 <Label>Hora de término padrão (24h)</Label>
-                <Input value={commonEnd} placeholder="18:00" onChange={(e) => setCommonEnd(e.target.value)} />
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={23}
+                    value={commonEnd.split(":")[0] || ""}
+                    onChange={(e) => setCommonEnd(`${String(e.target.value || "00").padStart(2, "0")}:${commonEnd.split(":")[1] || "00"}`)}
+                    className="w-16"
+                  />
+                  <span className="text-sm text-muted-foreground">:</span>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={59}
+                    value={commonEnd.split(":")[1] || ""}
+                    onChange={(e) => setCommonEnd(`${commonEnd.split(":")[0] || "18"}:${String(e.target.value || "00").padStart(2, "0")}`)}
+                    className="w-16"
+                  />
+                </div>
                 <p className="text-xs text-muted-foreground">Hora aplicada a todos os dias selecionados.</p>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 pt-4">
+            <div className="flex flex-row gap-2 pt-4">
               <Button variant="outline" onClick={applyCommonTimes}>
                 Aplicar horário
               </Button>

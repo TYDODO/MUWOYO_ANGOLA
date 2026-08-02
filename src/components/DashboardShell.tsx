@@ -10,6 +10,7 @@ import {
   ShoppingBag,
   CalendarDays,
   Boxes,
+  ArrowRightLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -24,6 +25,7 @@ const items = [
   { title: "Meu WhatsApp", to: "/whatsapp", icon: UsersRound },
   { title: "Pedidos", to: "/pedidos", icon: ShoppingBag },
   { title: "Minha Agenda", to: "/agenda", icon: CalendarDays },
+  { title: "Transferido para humano", to: "/transferido-para-humano", icon: ArrowRightLeft },
   { title: "Meus Produtos", to: "/produtos", icon: Boxes },
   { title: "Minha Loja", to: "/minha-loja", icon: Store },
   { title: "Recarregar mensagens", to: "/recargas", icon: CreditCard },

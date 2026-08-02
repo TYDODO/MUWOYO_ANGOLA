@@ -21,6 +21,7 @@ import Orders from "./pages/Orders";
 import Schedule from "./pages/Schedule";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminTokens from "./pages/AdminTokens";
+import HumanTransfers from "./pages/HumanTransfers";
 import SubAdminDashboard from "./pages/SubAdminDashboard";
 import NotFound from "./pages/NotFound.tsx";
 import LandingPageMWY from "../LandingPageMWY";
@@ -118,6 +119,10 @@ const App = () => (
             <Route path="/whatsapp" element={protectedPage(<MyWhatsApp />)} />
             <Route path="/pedidos" element={protectedPage(<Orders />)} />
             <Route path="/agenda" element={protectedPage(<Schedule />)} />
+            <Route
+              path="/transferido-para-humano"
+              element={protectedPage(<HumanTransfers />)}
+            />
             <Route
               path="/minha-loja"
               element={protectedPage(<StoreManagement />)}

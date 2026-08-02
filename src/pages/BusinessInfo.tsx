@@ -12,6 +12,8 @@ import { useToast } from "@/hooks/use-toast";
 import { buildProfilePayload } from "@/lib/profile-persistence";
 import { Switch } from "@/components/ui/switch";
 
+const BUSINESS_INFO_DRAFT_KEY = "muwoyo-business-info-draft";
+
 export default function BusinessInfo() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -25,6 +27,24 @@ export default function BusinessInfo() {
     appointment_duration_minutes: 30,
     accepts_appointments: true,
   });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const cached = window.localStorage.getItem(BUSINESS_INFO_DRAFT_KEY);
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        setForm((current) => ({ ...current, ...parsed }));
+      } catch {
+        window.localStorage.removeItem(BUSINESS_INFO_DRAFT_KEY);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(BUSINESS_INFO_DRAFT_KEY, JSON.stringify(form));
+  }, [form]);
 
   useEffect(() => {
     if (!user) return;
@@ -83,6 +103,9 @@ export default function BusinessInfo() {
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
       return { error };
+    }
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(BUSINESS_INFO_DRAFT_KEY);
     }
     toast({ title: "Guardado", description: "Informações atualizadas com sucesso." });
     return {};

@@ -14,3 +14,6 @@ verify_jwt = false
 
 [functions.populate-ai-documents]
 verify_jwt = false
+
+[functions.push-dispatch]
+verify_jwt = false
