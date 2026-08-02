@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { BarChart3, Bell, LogOut, Menu, Shield, Users, UserPlus, Search } from "lucide-react";
+import { BarChart3, Bell, Coins, LogOut, Menu, Shield, Users, UserPlus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -9,7 +9,7 @@ import NotificationBell from "@/components/NotificationBell";
 import ProfileSheet from "@/components/ProfileSheet";
 import logo from "@/assets/muwoyo-logo.png";
 
-const adminItems = [{ title: "Dashboard", to: "/admin", icon: BarChart3 }, { title: "Usuários", to: "/admin?tab=users", icon: Users }, { title: "Subadmins", to: "/admin?tab=subadmins", icon: Shield }, { title: "Notificações", to: "/admin?tab=notifications", icon: Bell }];
+const adminItems = [{ title: "Dashboard", to: "/admin", icon: BarChart3 }, { title: "Tokens", to: "/admin?tab=tokens", icon: Coins }, { title: "Usuários", to: "/admin?tab=users", icon: Users }, { title: "Subadmins", to: "/admin?tab=subadmins", icon: Shield }, { title: "Notificações", to: "/admin?tab=notifications", icon: Bell }];
 const subItems = [{ title: "Dashboard", to: "/gestor", icon: BarChart3 }, { title: "Cadastrar usuário", to: "/gestor?tab=create", icon: UserPlus }, { title: "Meus usuários", to: "/gestor?tab=users", icon: Users }, { title: "Mensagem ao Admin", to: "/gestor?tab=notify", icon: Bell }];
 
 function Side({ mode }: { mode: "admin" | "sub" }) {

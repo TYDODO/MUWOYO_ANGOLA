@@ -97,7 +97,15 @@ export default function Schedule() {
   useEffect(() => {
     if (!user) return;
 
-    void supabase.rpc("update_expired_appointments").catch(() => undefined);
+    const syncExpiredAppointments = async () => {
+      try {
+        await supabase.rpc("update_expired_appointments");
+      } catch {
+        // ignore RPC errors for the schedule refresh path
+      }
+    };
+
+    void syncExpiredAppointments();
     void load();
 
     const channel = supabase

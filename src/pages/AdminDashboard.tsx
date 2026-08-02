@@ -87,10 +87,18 @@ export default function AdminDashboard() {
   const [edit, setEdit] = useState<Row | null>(null);
   const [msg, setMsg] = useState({ userId: "", amount: "" });
   const [tokenBalances, setTokenBalances] = useState<any[]>([]);
+  const [tokenUsageRows, setTokenUsageRows] = useState<any[]>([]);
+  const [selectedTokenUserId, setSelectedTokenUserId] = useState<string>("");
   const [depositForm, setDepositForm] = useState({
     userId: "",
     amount: "",
     description: "",
+  });
+  const [modelSettings, setModelSettings] = useState({
+    model_name: "gpt-4o",
+    input_cost_per_1m_usd: "0",
+    output_cost_per_1m_usd: "0",
+    estimated_tokens_per_message: "1500",
   });
   const load = async () => {
     const { data: profiles } = await sb
@@ -134,6 +142,30 @@ export default function AdminDashboard() {
     }));
 
     setTokenBalances(rows);
+    if (!selectedTokenUserId && rows[0]?.user_id) {
+      setSelectedTokenUserId(rows[0].user_id);
+    }
+  };
+  const loadTokenUsage = async (userId: string) => {
+    if (!userId) {
+      setTokenUsageRows([]);
+      return;
+    }
+    const { data, error } = await sb
+      .from("ai_usage_events")
+      .select(
+        "id, user_id, execution_id, workflow_name, workflow_id, model_id, prompt_tokens, completion_tokens, total_tokens, cost_usd, created_at",
+      )
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(25);
+
+    if (error) {
+      console.warn("Failed to load AI usage history", error);
+      setTokenUsageRows([]);
+      return;
+    }
+    setTokenUsageRows(data || []);
   };
   const handleRegisterDeposit = async (e?: FormEvent) => {
     e?.preventDefault();
@@ -207,6 +239,11 @@ export default function AdminDashboard() {
     load();
     loadTokenBalances();
   }, []);
+  useEffect(() => {
+    if (selectedTokenUserId) {
+      void loadTokenUsage(selectedTokenUserId);
+    }
+  }, [selectedTokenUserId]);
   const filtered = users
     .filter((u) =>
       filter === "active"
@@ -382,11 +419,6 @@ export default function AdminDashboard() {
           label="Ganhos totais"
           value={`${(users.length * 22500).toLocaleString("pt-AO")} Kz`}
           icon={<Coins />}
-        />
-        <Stat
-          label="Saldo IA"
-          value={`${tokenBalances.reduce((sum, row) => sum + Number(row.saldo_atual_usd || 0), 0).toFixed(2)} USD`}
-          icon={<Sparkles />}
         />
         <Stat
           label="Mensagens vendidas"
@@ -567,63 +599,23 @@ export default function AdminDashboard() {
         }
         onDelete={(u) => call({ action: "deleteUser", userId: u.user_id })}
       />
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-2">
-          <CardTitle>Saldo IA por utilizador</CardTitle>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRecalculateBalances}
-          >
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Recalcular saldos
-          </Button>
-        </CardHeader>
-        <CardContent className="grid gap-4 lg:grid-cols-[1.3fr_0.9fr]">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {tokenBalances.map((row) => (
-              <div
-                key={row.user_id}
-                className="rounded-lg border bg-card p-3 shadow-sm"
-              >
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <div>
-                    <div className="font-medium">{row.full_name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {row.business_name}
-                    </div>
-                  </div>
-                  <Wallet className="h-4 w-4 text-primary" />
-                </div>
-                <div className="space-y-1 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Depositado</span>
-                    <span>{Number(row.total_depositado_usd || 0).toFixed(2)} USD</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Gasto</span>
-                    <span>{Number(row.total_gasto_usd || 0).toFixed(2)} USD</span>
-                  </div>
-                  <div className="flex justify-between font-semibold">
-                    <span>Saldo</span>
-                    <span>{Number(row.saldo_atual_usd || 0).toFixed(2)} USD</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Estimativa</span>
-                    <span>{row.mensagens_restantes_estimadas ?? 0}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
+      <Card className="border border-border/60 bg-[#0B0F17] text-white shadow-none">
+        <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <CardTitle className="text-2xl font-semibold text-white">
+              Gerenciamento de Tokens & Saldo
+            </CardTitle>
+            <p className="mt-1 text-sm text-slate-400">
+              Visualize rapidamente o crédito disponível, o histórico de uso e configure os custos de modelos.
+            </p>
           </div>
-          <form className="space-y-3 rounded-lg border p-4" onSubmit={handleRegisterDeposit}>
-            <div className="text-sm font-semibold">Registrar depósito USD</div>
+          <div className="flex flex-wrap items-center gap-2">
             <Select
-              value={depositForm.userId}
-              onValueChange={(value) => setDepositForm({ ...depositForm, userId: value })}
+              value={selectedTokenUserId}
+              onValueChange={setSelectedTokenUserId}
             >
-              <SelectTrigger>
-                <SelectValue placeholder="Escolher utilizador" />
+              <SelectTrigger className="w-full min-w-[260px] border-slate-700 bg-[#161C24] text-white">
+                <SelectValue placeholder="Selecionar usuário" />
               </SelectTrigger>
               <SelectContent>
                 {allUsersForSelect.map((u) => (
@@ -633,24 +625,183 @@ export default function AdminDashboard() {
                 ))}
               </SelectContent>
             </Select>
-            <Input
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="Valor em USD"
-              value={depositForm.amount}
-              onChange={(e) => setDepositForm({ ...depositForm, amount: e.target.value })}
-            />
-            <Textarea
-              placeholder="Descrição do depósito"
-              value={depositForm.description}
-              onChange={(e) => setDepositForm({ ...depositForm, description: e.target.value })}
-            />
-            <Button type="submit" className="w-full">
-              <Wallet className="mr-2 h-4 w-4" />
-              Gravar depósito
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleRecalculateBalances}
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Recarregar Saldo
             </Button>
-          </form>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-xl border border-slate-800 bg-[#161C24] p-4">
+              <div className="text-sm text-slate-400">Total Depositado</div>
+              <div className="mt-2 text-2xl font-semibold text-emerald-400">
+                {Number(
+                  tokenBalances.find((row) => row.user_id === selectedTokenUserId)?.total_depositado_usd || 0,
+                ).toFixed(2)} USD
+              </div>
+            </div>
+            <div className="rounded-xl border border-slate-800 bg-[#161C24] p-4">
+              <div className="text-sm text-slate-400">Total Gasto</div>
+              <div className="mt-2 text-2xl font-semibold text-amber-400">
+                {Number(
+                  tokenBalances.find((row) => row.user_id === selectedTokenUserId)?.total_gasto_usd || 0,
+                ).toFixed(2)} USD
+              </div>
+            </div>
+            <div className="rounded-xl border border-slate-800 bg-[#161C24] p-4">
+              <div className="text-sm text-slate-400">Saldo Restante</div>
+              <div className="mt-2 text-2xl font-semibold text-emerald-300">
+                {Number(
+                  tokenBalances.find((row) => row.user_id === selectedTokenUserId)?.saldo_atual_usd || 0,
+                ).toFixed(2)} USD
+              </div>
+            </div>
+            <div className="rounded-xl border border-slate-800 bg-[#161C24] p-4">
+              <div className="text-sm text-slate-400">Estimativa de Mensagens</div>
+              <div className="mt-2 text-2xl font-semibold text-sky-300">
+                {tokenBalances.find((row) => row.user_id === selectedTokenUserId)?.mensagens_restantes_estimadas ?? 0}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[1.35fr_0.9fr]">
+            <div className="rounded-xl border border-slate-800 bg-[#161C24] p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="text-lg font-semibold text-white">Histórico de Consumo de IA</div>
+                <div className="text-xs text-slate-400">Últimas 25 execuções</div>
+              </div>
+              <div className="overflow-auto">
+                <table className="w-full min-w-[700px] text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-left text-slate-400">
+                      <th className="pb-3">Data / Hora</th>
+                      <th className="pb-3">Workflow</th>
+                      <th className="pb-3">Modelo</th>
+                      <th className="pb-3">Input</th>
+                      <th className="pb-3">Output</th>
+                      <th className="pb-3">Custo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tokenUsageRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-6 text-center text-slate-400">
+                          Sem eventos de uso para este utilizador ainda.
+                        </td>
+                      </tr>
+                    ) : (
+                      tokenUsageRows.map((row) => (
+                        <tr key={row.id} className="border-b border-slate-900 last:border-0">
+                          <td className="py-3 text-slate-300">
+                            {new Date(row.created_at).toLocaleString("pt-AO")}
+                          </td>
+                          <td className="py-3 text-slate-300">{row.workflow_name || row.workflow_id || "n8n"}</td>
+                          <td className="py-3 text-slate-300">{row.model_id || "-"}</td>
+                          <td className="py-3 text-slate-300">{row.prompt_tokens || 0}</td>
+                          <td className="py-3 text-slate-300">{row.completion_tokens || 0}</td>
+                          <td className="py-3 text-emerald-300">${Number(row.cost_usd || 0).toFixed(4)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="space-y-4 rounded-xl border border-slate-800 bg-[#161C24] p-4">
+              <div className="text-lg font-semibold text-white">Custos de Modelo</div>
+              <div className="space-y-3">
+                <Input
+                  placeholder="Modelo (ex.: gpt-4o)"
+                  value={modelSettings.model_name}
+                  onChange={(e) => setModelSettings({ ...modelSettings, model_name: e.target.value })}
+                />
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.000001"
+                  placeholder="Input / 1M tokens (USD)"
+                  value={modelSettings.input_cost_per_1m_usd}
+                  onChange={(e) => setModelSettings({ ...modelSettings, input_cost_per_1m_usd: e.target.value })}
+                />
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.000001"
+                  placeholder="Output / 1M tokens (USD)"
+                  value={modelSettings.output_cost_per_1m_usd}
+                  onChange={(e) => setModelSettings({ ...modelSettings, output_cost_per_1m_usd: e.target.value })}
+                />
+                <Input
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="Média de tokens / mensagem"
+                  value={modelSettings.estimated_tokens_per_message}
+                  onChange={(e) => setModelSettings({ ...modelSettings, estimated_tokens_per_message: e.target.value })}
+                />
+                <Button
+                  className="w-full"
+                  onClick={async () => {
+                    const { error } = await sb.from("ai_models").upsert({
+                      model_name: modelSettings.model_name,
+                      input_cost_per_1m_usd: Number(modelSettings.input_cost_per_1m_usd || 0),
+                      output_cost_per_1m_usd: Number(modelSettings.output_cost_per_1m_usd || 0),
+                      estimated_tokens_per_message: Number(modelSettings.estimated_tokens_per_message || 1500),
+                    }, { onConflict: "model_name" });
+                    if (error) {
+                      toast({ title: "Erro", description: error.message, variant: "destructive" });
+                      return;
+                    }
+                    toast({ title: "Custo salvo", description: "Modelo atualizado com sucesso." });
+                  }}
+                >
+                  Salvar custo do modelo
+                </Button>
+              </div>
+
+              <form className="mt-5 space-y-3 rounded-lg border border-slate-800 bg-[#111723] p-4" onSubmit={handleRegisterDeposit}>
+                <div className="text-sm font-semibold text-white">Recarga de Saldo em USD</div>
+                <Select
+                  value={depositForm.userId}
+                  onValueChange={(value) => setDepositForm({ ...depositForm, userId: value })}
+                >
+                  <SelectTrigger className="border-slate-700 bg-[#161C24] text-white">
+                    <SelectValue placeholder="Escolher utilizador" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allUsersForSelect.map((u) => (
+                      <SelectItem key={u.user_id} value={u.user_id}>
+                        {u.full_name || u.business_name || u.phone || u.user_id.slice(0, 8)} ({u.role})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Valor em USD"
+                  value={depositForm.amount}
+                  onChange={(e) => setDepositForm({ ...depositForm, amount: e.target.value })}
+                />
+                <Textarea
+                  placeholder="Descrição do depósito"
+                  value={depositForm.description}
+                  onChange={(e) => setDepositForm({ ...depositForm, description: e.target.value })}
+                />
+                <Button type="submit" className="w-full">
+                  <Wallet className="mr-2 h-4 w-4" />
+                  Gravar depósito
+                </Button>
+              </form>
+            </div>
+          </div>
         </CardContent>
       </Card>
       <Card>
