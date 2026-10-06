@@ -1,0 +1,43 @@
+project_id = "twrbtaqugutkbkhizgxd"
+
+[functions.evolution-api]
+verify_jwt = false
+
+[functions.webhook]
+verify_jwt = false
+
+[functions.n8n-callback]
+verify_jwt = false
+
+[functions.admin-users]
+verify_jwt = false
+
+[functions.populate-ai-documents]
+verify_jwt = false
+
+[functions.push-dispatch]
+verify_jwt = false
+
+[functions.send-email]
+verify_jwt = false
+
+[functions.send-verification-code]
+verify_jwt = false
+
+[functions.verify-email-code]
+verify_jwt = false
+
+[functions.commercial-flow]
+verify_jwt = false
+
+[functions.inbox-sync]
+verify_jwt = false
+
+[functions.inbox-actions]
+verify_jwt = false
+
+[functions.mark-conversation-read]
+verify_jwt = true
+
+[functions.team-members]
+verify_jwt = false

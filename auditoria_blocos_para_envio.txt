@@ -1,0 +1,329 @@
+Auditoria por blocos – coleta de código real para inspeção sem alterar nada
+
+Objetivo
+- Não implementar nada ainda.
+- Identificar com precisão o que está errado no projeto atual.
+- Coletar os códigos reais, triggers, migrations e configurações correspondentes.
+- Depois, avaliar com base no código real e não em suposições.
+
+Resumo da estratégia
+- Vamos separar em blocos.
+- Para cada bloco, o usuário envia os arquivos correspondentes.
+- Depois, a análise classifica cada item como:
+  - ✅ CORRETO
+  - 🔴 ERRO CONFIRMADO
+  - 🟠 POSSÍVEL ERRO — PRECISA VALIDAR
+  - 🟡 INCONSISTÊNCIA
+  - ⚪ SEM PROBLEMA
+
+Como a análise será feita
+- Para cada problema, mostrar:
+  - PROBLEMA
+  - POR QUE ACONTECE
+  - QUAL CÓDIGO ESTÁ CAUSANDO
+  - QUAL DEVE SER O COMPORTAMENTO CORRETO
+  - O QUE PRECISO DE VOCÊ PARA CONFIRMAR
+
+Sem alterar nada e sem inventar código antes de ver o código real.
+
+
+## 🔴 Erros confirmados
+
+### 1. subscribe — frontend e Edge Function têm contratos diferentes
+Frontend envia:
+{
+  user_id,
+  endpoint,
+  keys: {
+    p256dh,
+    auth
+  }
+}
+
+Edge Function espera:
+{
+  user_id,
+  subscription: {
+    endpoint,
+    keys: {
+      p256dh,
+      auth
+    }
+  }
+}
+
+➡️ Erro confirmado.
+
+Me envie:
+- src/lib/web-push.ts
+- supabase/functions/subscribe/index.ts
+
+
+### 2. handle_new_user() — existem várias versões
+Você mostrou pelo menos 3 comportamentos diferentes.
+
+Uma versão:
+account_status = trial
+message_limit = 50
+free_messages_granted = true
+credit_ledger +50
+
+Outra:
+account_status = trial
+message_limit = 0
+free_messages_granted = false
+
+Isso é uma divergência séria porque muda completamente o comportamento do cadastro.
+
+➡️ Problema confirmado no histórico.
+
+Mas precisamos descobrir qual versão está realmente ativa no banco.
+
+Me envie:
+- todas as migrations que possuem handle_new_user
+- ou, melhor ainda, o código atual da função no Supabase.
+
+
+### 3. email_on_profile_created() — várias versões
+Também existem versões diferentes.
+
+Uma dispara:
+- send-verification-code
+- trial_start
+
+Outra dispara somente:
+- send-verification-code
+
+➡️ Problema confirmado no histórico.
+
+Precisamos saber qual está ativa e qual trigger está ligado a ela.
+
+Me envie:
+- função atual email_on_profile_created()
+- trigger trg_email_on_profile_created
+- migrations onde ela aparece.
+
+
+### 4. release_trial_credits_after_email_verification() — conflito lógico
+Você mostrou uma implementação que realmente concede:
+- +50 trial credits
+
+e outra que simplesmente retorna:
+{
+  "ok": true,
+  "credits_added": false
+}
+
+➡️ Isso é uma inconsistência real.
+
+Precisamos descobrir qual versão está ativa.
+
+Me envie:
+- função atual release_trial_credits_after_email_verification()
+- código de verify-email-code/index.ts
+- trigger/RPC relacionado, se existir.
+
+
+## 🟠 Problemas que precisam ser verificados
+
+### 5. config.toml
+A auditoria diz que:
+- password-reset
+- subscribe
+
+existem como Edge Functions, mas não aparecem no config.toml.
+
+Isso pode ser problema dependendo da configuração/deploy.
+
+Não vou assumir que está quebrado.
+
+Me envie:
+- supabase/config.toml
+
+
+### 6. Secrets / Vault
+O sistema depende de:
+- SUPABASE_URL
+- SUPABASE_SERVICE_ROLE_KEY
+
+no Vault para:
+- pg_net
+  ↓
+- invoke_email_edge_function()
+  ↓
+- Edge Function
+
+E as Edge Functions dependem de:
+- ZEPTOMAIL_API_KEY
+- ZEPTOMAIL_ENDPOINT
+- ZEPTOMAIL_FROM
+- ZEPTOMAIL_FROM_NAME
+
+➡️ Aqui precisamos verificar se os nomes usados no código são exatamente os nomes configurados.
+
+Me envie:
+- invoke_email_edge_function()
+- configuração/SQL do Vault, se tiver
+- send-email/index.ts
+- config.toml
+
+Não envie os valores reais dos secrets. Só os nomes/configuração.
+
+
+### 7. service_role / segurança
+Isso não significa automaticamente que há uma vulnerabilidade.
+
+Precisamos analisar exatamente:
+- quem pode chamar a Edge Function
+- qual o fluxo até o service_role
+- como o acesso depende das tabelas e da Auth
+
+O ponto mais suspeito é subscribe, porque a auditoria indica que ele recebe:
+- user_id
+do cliente.
+
+Mas preciso ver o código para afirmar se isso realmente permite abuso.
+
+Me envie:
+- subscribe/index.ts
+- eventualmente as policies de web_push_subscriptions.
+
+
+## 🟡 Pontos de consistência que precisamos investigar
+
+### 8. profiles.email
+Temos:
+- auth.users.email
+- profiles.email
+
+e também:
+- profiles.pending_email
+- profiles.email_verified
+- auth.users.email_confirmed_at
+
+Isso pode gerar estados como:
+- auth.users.email = A
+- profiles.email = A
+- pending_email = B
+- email_verified = false
+
+Precisamos verificar se, depois da confirmação, tudo termina corretamente em:
+- auth.users.email = B
+- profiles.email = B
+- pending_email = NULL
+- email_verified = true
+
+Me envie:
+- ProfileSheet.tsx
+- email-verification.ts
+- send-verification-code/index.ts
+- verify-email-code/index.ts
+
+
+### 9. Email automático
+Precisamos verificar esta cadeia:
+
+profiles INSERT
+      ↓
+trg_email_on_profile_created
+      ↓
+email_on_profile_created()
+      ↓
+send-verification-code
+      ↓
+send-email
+      ↓
+ZeptoMail
+
+E:
+
+auth.users
+      ↓
+email_confirmado_at
+      ↓
+trg_email_on_user_verified
+      ↓
+email_on_user_verified()
+      ↓
+dispatch_email_once()
+      ↓
+send-email
+
+Aqui pode haver duplicação de emails dependendo das versões ativas.
+
+Me envie as duas funções + os dois triggers.
+
+
+# 📌 O que quero que você me envie agora
+Não precisa mandar o projeto inteiro.
+
+Vamos fazer por blocos para eu conseguir auditar precisamente.
+
+## BLOCO 1 — subscribe
+Envie:
+- src/lib/web-push.ts
+- supabase/functions/subscribe/index.ts
+
+## BLOCO 2 — criação de usuário
+Depois:
+- handle_new_user()
+- trigger on_auth_user_created
+- e as migrations onde aparecem.
+
+## BLOCO 3 — email verification
+Depois:
+- send-verification-code/index.ts
+- verify-email-code/index.ts
+- src/lib/email-verification.ts
+
+## BLOCO 4 — email triggers
+Depois:
+- email_on_profile_created()
+- email_on_user_verified()
+- email_on_credit_boundary()
+- dispatch_email_once()
+- invoke_email_edge_function()
+- mais os respectivos triggers.
+
+## BLOCO 5 — créditos
+Depois:
+- release_trial_credits_after_email_verification()
+- credit_ledger
+- e qualquer função relacionada ao trial.
+
+## BLOCO 6 — password reset
+Depois:
+- password-reset/index.ts
+- PasswordRecovery.tsx
+
+## BLOCO 7 — configuração
+Por último:
+- supabase/config.toml
+- e a lista dos nomes dos secrets/envs configurados.
+
+
+# 📌 Como vou trabalhar
+Para cada bloco vou classificar cada item como:
+- ✅ CORRETO
+- 🔴 ERRO CONFIRMADO
+- 🟠 POSSÍVEL ERRO — PRECISA VALIDAR
+- 🟡 INCONSISTÊNCIA
+- ⚪ SEM PROBLEMA
+
+E, quando encontrar um erro, vou mostrar:
+
+PROBLEMA
+↓
+POR QUE ACONTECE
+↓
+QUAL CÓDIGO ESTÁ CAUSANDO
+↓
+QUAL DEVE SER O COMPORTAMENTO CORRETO
+↓
+O QUE PRECISO DE VOCÊ PARA CONFIRMAR
+
+Sem alterar nada e sem eu inventar código antes de ver o código real.
+
+
+# 📌 Observação final
+A ideia é que a análise seja feita com base em evidência real do código e do banco, e não em interpretações acidentais ou suposições antes de verificar a implementação ativa.

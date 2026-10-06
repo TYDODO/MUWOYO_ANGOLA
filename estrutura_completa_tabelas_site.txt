@@ -1,0 +1,1158 @@
+RELATORIO DE ESTRUTURAS DAS TABELAS EM USO NO SITE
+Projeto: MUWOYO_ANGOLA
+Escopo: somente diagnostico baseado no repositorio local
+Data da consulta: 2026-09-02
+
+REGRA DE LEITURA
+Este arquivo descreve o que foi encontrado em src/, supabase/functions/ e supabase/migrations/. Ele nao confirma o estado atualmente aplicado no projeto Supabase. Para confirmar o banco real, deploy das Edge Functions, policies efetivas, triggers existentes e colunas criadas por migrations ja aplicadas, e necessario consultar o ambiente Supabase.
+
+CLASSIFICACOES
+- CONFIRMADO NO REPOSITORIO: existe definicao ou uso direto nos arquivos locais.
+- NAO CONFIRMADO NO BANCO: o arquivo local nao prova que a migration foi aplicada.
+- SEM DEFINICAO LOCAL COMPLETA: o site usa o objeto, mas nao foi encontrada a criacao completa no conjunto de migrations pesquisado.
+
+
+============================================================
+1. INVENTARIO GERAL
+============================================================
+
+Tabelas publicas declaradas nas migrations:
+1. profiles
+2. user_roles
+3. instances
+4. whatsapp_contacts
+5. blocked_contacts
+6. messages
+7. stores
+8. products
+9. product_images
+10. store_orders
+11. appointments
+12. notifications
+13. message_queue
+14. ai_documents
+15. top_up_packages
+16. top_up_requests
+17. categories
+18. product_reviews
+19. store_carousel_slides
+20. product_variants
+21. ai_models
+22. user_ai_deposits
+23. ai_usage_events
+24. user_ai_balances
+25. human_transfer_requests
+26. push_dispatch_queue
+27. credit_ledger
+28. email_verifications
+29. email_dispatch_events
+30. tutorial_videos
+31. password_reset_codes
+32. password_reset_tokens
+
+Objetos publicos referenciados pelo site, mas sem CREATE TABLE local completo encontrado nesta busca:
+33. affiliate_profiles
+34. affiliate_commissions
+35. affiliate_withdrawal_requests
+
+Objetos Supabase Storage referenciados:
+- store-assets
+- business-docs
+- notification-images
+- avatars
+- tutorial-media
+
+Objetos especiais:
+- auth.users: tabela interna do Supabase Auth; nao e criada pelas migrations locais.
+- storage.objects: tabela interna do Supabase Storage; as migrations criam policies sobre ela.
+- views public.v_web_push_subscriptions_by_user e public.v_ai_user_balance_dashboard.
+
+
+============================================================
+2. ESTRUTURAS COMPLETAS ENCONTRADAS
+============================================================
+
+2.1 public.profiles
+Migration base: 20260501012059_a2740c9d-06e7-4d45-a866-84dd9c7ae712.sql
+Alteracoes posteriores:
+- 20260422012617_32770c48-3d5d-47be-bc8f-e07f35906b6a.sql
+- 20260504174402_c65120e7-83a4-4092-a875-a271248dfa38.sql
+- 20260802010000_profiles_business_ai_columns.sql
+- 20260818000000_commercial_activation_flow.sql
+- 20260819020000_custom_email_verified.sql
+- 20260820011000_pending_email.sql
+- 20260821001000_repair_email_verified_column.sql
+- 20260821002000_repair_legal_acceptance_columns.sql
+- 20260822020000_inactive_account_retention.sql
+- 20260824000000_trial_starts_on_whatsapp_connection.sql
+
+Colunas base e conhecidas:
+- id uuid primary key default gen_random_uuid()
+- user_id uuid not null unique references auth.users(id) on delete cascade
+- email text
+- phone text
+- full_name text
+- business_name text
+- business_description text
+- ai_name text default 'Muwoyo'
+- ai_rules text
+- status text not null default 'active'
+- is_suspended boolean not null default false
+- onboarding_completed boolean not null default false
+- message_limit integer not null default 0
+- messages_received integer not null default 0
+- free_messages_granted boolean not null default false
+- created_by uuid references auth.users(id) on delete set null
+- created_at timestamptz not null default now()
+- updated_at timestamptz not null default now()
+
+Colunas adicionadas ou referenciadas posteriormente:
+- avatar_url text
+- business_address text, business_hours text e demais colunas de informacao comercial/IA da migration de business AI; esquema exato deve ser confirmado no arquivo dessa migration e no banco
+- account_status text not null default 'trial'
+- setup_paid_at timestamptz
+- setup_payment_id uuid
+- activated_at timestamptz
+- activated_by uuid references auth.users(id) on delete set null
+- email_verified boolean not null default false
+- pending_email text
+- legal_accepted_at timestamptz e colunas de aceite legal conforme migrations de reparo
+- trial_started_at timestamptz
+- trial_expires_at timestamptz
+- activity_started_at timestamptz, conforme migration de retencao
+- referred_by uuid/text e referral_code_used conforme uso em Affiliates.tsx; definicao local nao confirmada nesta busca
+
+Constraints e indices conhecidos:
+- primary key id
+- unique user_id
+- profiles_created_by_idx
+- profiles_status_idx
+- profiles_phone_idx
+- profiles_account_status_idx
+- profiles_email_verified_idx, quando criada pela migration correspondente
+
+RLS: habilitado.
+Policies encontradas:
+- profiles self read: select usando auth.uid() = user_id
+- profiles self update: update usando auth.uid() = user_id
+- profiles self insert: insert com auth.uid() = user_id
+- profiles admin all: all usando public.is_admin(auth.uid())
+- profiles subadmin read own: select usando created_by = auth.uid()
+- outras policies de manager/admin foram criadas em migration anterior e podem coexistir; estado efetivo precisa de consulta ao banco
+
+Triggers encontrados:
+- trg_profiles_updated: before update -> public.tg_set_updated_at()
+- trg_notify_admin_user: after insert -> public.notify_admin_on_user_create()
+- trg_email_on_profile_created: after insert -> public.email_on_profile_created()
+- trg_email_on_credit_boundary: after update of message_limit, messages_received, account_status -> public.email_on_credit_boundary()
+- trg_protect_profile_commercial_fields: before update -> public.protect_profile_commercial_fields()
+- trg_profile_message_entitlement: migration 20260819040000
+- trg_force_trial_message_limit: migration 20260820010000
+- trg_notify_new_account: migration 20260821003000
+- trg_guard_profile_email_uniqueness: migration 20260822000000
+- trg_messages_mark_profile_activity: migration 20260822020000
+- outros triggers anteriores podem existir; NAO CONFIRMADO NO BANCO.
+
+Uso no site:
+- autenticacao, onboarding, credito, email, status comercial, perfil e controle de acesso.
+
+
+2.2 public.user_roles
+Migration base: 20260501012059...
+- id uuid primary key default gen_random_uuid()
+- user_id uuid not null references auth.users(id) on delete cascade
+- role public.app_role not null default 'client'
+- created_at timestamptz not null default now()
+- unique(user_id, role)
+
+Enum:
+- public.app_role = admin | sub_admin | client
+
+RLS: habilitado.
+Policies:
+- roles self read: select usando auth.uid() = user_id
+- roles admin all: all usando public.is_admin(auth.uid())
+
+Triggers: nenhum trigger especifico encontrado.
+Funcoes relacionadas:
+- public.has_role(uuid, app_role)
+- public.is_admin(uuid)
+- public.is_admin_or_subadmin(uuid), usada por fluxos comerciais
+
+Uso: roles, protecao de rotas, admin e subadmin.
+
+
+2.3 public.instances
+Migration base: 20260501012059...
+Alteracoes:
+- phone_number text
+- connection_state default 'disconnected'
+- automation_paused boolean default false
+- automation_paused_until timestamptz
+- constraints unique para user_id e instance_name
+
+Colunas:
+- id uuid primary key default gen_random_uuid()
+- user_id uuid not null unique references auth.users(id) on delete cascade
+- instance_name text not null unique
+- phone text
+- phone_number text
+- status public.instance_status not null default 'pending'
+- connection_state text default 'disconnected'
+- evolution_state text
+- automation_paused boolean not null default false
+- automation_paused_until timestamptz
+- qr_code text
+- last_connected_at timestamptz
+- created_at timestamptz not null default now()
+- updated_at timestamptz not null default now()
+
+Enum instance_status: pending | connecting | connected | disconnected. Observacao: uma migration cria valor placeholder em fluxo legado; compatibilidade desse valor com o enum deve ser confirmada no banco.
+
+RLS: habilitado.
+Policies:
+- instances owner all: all usando auth.uid() = user_id
+- instances admin all: all usando public.is_admin(auth.uid())
+
+Triggers:
+- trg_instances_updated: before update -> public.tg_set_updated_at()
+- on_auth_user_created_instance: after insert em auth.users -> public.create_instance_on_signup()
+- trg_guard_instance_phone_uniqueness: migration 20260822000000
+- trg_enforce_single_connection_for_user: migration 20260822000000
+- trg_instances_mark_profile_activity: migration 20260822020000
+
+
+2.4 public.whatsapp_contacts
+Definicoes em:
+- 20260501012059...
+- 20260422002113_6ede0255-218a-4ba2-90a1-7662224476a6.sql
+
+Estrutura base conhecida:
+- id uuid primary key default gen_random_uuid()
+- user_id uuid not null references auth.users(id) on delete cascade
+- instance_name text
+- phone_number text not null
+- name text
+- profile_pic_url text, presente na definicao de 20260422
+- should_respond boolean not null default true
+- last_message_at timestamptz
+- created_at timestamptz not null default now()
+- updated_at timestamptz, presente na definicao de 20260422
+- unique(user_id, phone_number)
+
+RLS: habilitado.
+Policies:
+- contacts owner all: all usando auth.uid() = user_id
+- Users manage own whatsapp contacts: all para authenticated usando auth.uid() = user_id
+
+Triggers:
+- update_whatsapp_contacts_updated_at: before update -> public.update_updated_at_column()
+
+Uso: MyWhatsApp, webhook e evolution-api.
+
+
+2.5 public.blocked_contacts
+Estrutura base conhecida:
+- id uuid primary key default gen_random_uuid()
+- user_id uuid not null references auth.users(id) on delete cascade
+- instance_name text, presente na migration de 20260422
+- phone_number text not null
+- contact_name text, presente na migration de 20260422
+- reason text
+- is_active boolean not null default true
+- created_at timestamptz not null default now()
+- updated_at timestamptz, presente na migration de 20260422
+- unique(user_id, phone_number)
+
+RLS: habilitado.
+Policies:
+- blocks owner all: all usando auth.uid() = user_id
+- Users manage own blocked contacts: all para authenticated usando auth.uid() = user_id
+
+Triggers:
+- update_blocked_contacts_updated_at: before update -> public.update_updated_at_column()
+
+
+2.6 public.messages
+Colunas:
+- id uuid primary key default gen_random_uuid()
+- user_id uuid not null references auth.users(id) on delete cascade
+- whatsapp_instance_id text
+- phone_number text not null
+- direction public.message_direction not null
+- kind public.message_kind not null default 'text'
+- message_text text
+- media_url text
+- external_id text
+- ai_responded boolean not null default false
+- created_at timestamptz not null default now()
+
+Enums:
+- message_direction = inbound | outbound
+- message_kind = text | audio | image | video | document | sticker | location | contact | other
+
+Indices:
+- idx_messages_user_created(user_id, created_at desc)
+- idx_messages_phone(user_id, phone_number)
+- idx_messages_daily_direct(user_id, created_at) partial para inbound e phone sem '-'
+
+RLS: habilitado.
+Policies:
+- messages owner read: select usando auth.uid() = user_id
+- messages admin all: all usando public.is_admin(auth.uid())
+
+Triggers:
+- trg_increment_ai_message: after insert -> public.increment_ai_message_count()
+- trg_messages_mark_profile_activity: migration 20260822020000
+
+
+2.7 public.stores
+Colunas base:
+- id uuid primary key default gen_random_uuid()
+- user_id uuid not null unique references auth.users(id) on delete cascade
+- name text not null
+- slug text not null unique
+- description text
+- logo_url text
+- cover_url text
+- theme_color text default '#16a34a' (migration posterior tambem usa default 'emerald')
+- checkout_whatsapp text
+- is_active boolean not null default true
+- created_at timestamptz not null default now()
+- updated_at timestamptz not null default now()
+
+Alteracoes conhecidas:
+- header_color text
+- public_description text
+
+Indices:
+- stores_slug_key
+
+RLS: habilitado.
+Policies:
+- stores public read: select using true
+- stores owner all: all usando auth.uid() = user_id
+- Public can view active stores: select para anon/authenticated usando is_active = true
+
+Trigger:
+- trg_stores_updated: before update -> public.tg_set_updated_at()
+
+
+2.8 public.products
+Colunas base:
+- id uuid primary key default gen_random_uuid()
+- store_id uuid not null references public.stores(id) on delete cascade
+- user_id uuid not null references auth.users(id) on delete cascade
+- name text not null
+- description text
+- price numeric(12,2) not null default 0
+- discount_price numeric(12,2)
+- stock integer not null default 0
+- category text
+- image_url text
+- is_active boolean not null default true
+- created_at timestamptz not null default now()
+- updated_at timestamptz not null default now()
+
+Alteracoes:
+- discount_policy text
+- category_ids uuid[] default '{}'
+- is_sold_out boolean not null default false
+- rating_avg numeric not null default 0
+- rating_count integer not null default 0
+
+Indices:
+- idx_products_store(store_id)
+
+RLS: habilitado.
+Policies:
+- products public read: select using true
+- products owner all: all usando auth.uid() = user_id
+- Public can view active products: select para anon/authenticated usando is_active = true
+
+Trigger:
+- trg_products_updated: before update -> public.tg_set_updated_at()
+- update_product_rating atua indiretamente quando product_reviews muda
+
+
+2.9 public.product_images
+Colunas:
+- id uuid primary key default gen_random_uuid()
+- product_id uuid not null references public.products(id) on delete cascade
+- url text not null
+- position integer not null default 0
+- created_at timestamptz not null default now()
+
+RLS: habilitado.
+Policies:
+- pimages public read: select using true
+- pimages owner all: all quando existe produto com product_id e products.user_id = auth.uid()
+
+Triggers: nenhum encontrado.
+
+
+2.10 public.store_orders
+Colunas:
+- id uuid primary key default gen_random_uuid()
+- user_id uuid not null references auth.users(id) on delete cascade
+- customer_name text
+- customer_phone text
+- customer_location text
+- items jsonb not null default '[]'::jsonb
+- total numeric(12,2) default 0
+- notes text
+- status text not null default 'new'
+- created_at timestamptz not null default now()
+- updated_at timestamptz not null default now()
+
+RLS: habilitado.
+Policies:
+- orders owner all: all usando auth.uid() = user_id
+- orders admin all: all usando public.is_admin(auth.uid())
+
+Triggers:
+- trg_orders_updated: before update -> public.tg_set_updated_at()
+- trg_notify_order: after insert -> public.notify_owner_new_order()
+
+
+2.11 public.appointments
+Colunas:
+- id uuid primary key default gen_random_uuid()
+- user_id uuid not null references auth.users(id) on delete cascade
+- customer_name text
+- customer_phone text
+- service text
+- description text
+- scheduled_at timestamptz
+- status text not null default 'pending'
+- created_at timestamptz not null default now()
+- updated_at timestamptz not null default now()
+
+RLS: habilitado.
+Policies:
+- appts owner all: all usando auth.uid() = user_id
+- appts admin all: all usando public.is_admin(auth.uid())
+
+Triggers:
+- trg_appointments_updated: before update -> public.tg_set_updated_at()
+- trg_notify_appt: after insert -> public.notify_owner_new_appointment()
+
+
+2.12 public.notifications
+Colunas:
+- id uuid primary key default gen_random_uuid()
+- user_id uuid not null references auth.users(id) on delete cascade
+- title text not null
+- message text not null
+- type text not null default 'info'
+- link text
+- image_url text
+- is_read boolean not null default false
+- created_at timestamptz not null default now()
+
+Indices:
+- idx_notifications_user(user_id, created_at desc)
+
+RLS: habilitado.
+Policies:
+- notif self read: select usando auth.uid() = user_id
+- notif self update: update usando auth.uid() = user_id
+- notif admin all: all usando public.is_admin(auth.uid())
+- policies adicionais de manager/targeted notifications aparecem em migration anterior
+
+Trigger:
+- trg_enqueue_push_dispatch: after insert -> public.enqueue_push_dispatch()
+
+
+2.13 public.message_queue
+Colunas:
+- id uuid primary key default gen_random_uuid()
+- user_id uuid not null references auth.users(id) on delete cascade
+- instance_name text not null
+- remote_jid text not null
+- payload jsonb not null
+- status public.queue_status not null default 'pending'
+- attempts integer not null default 0
+- last_error text
+- external_message_id text
+- scheduled_for timestamptz not null default now()
+- created_at timestamptz not null default now()
+- updated_at timestamptz not null default now()
+
+Enum queue_status: pending | processing | sent | failed | delivered
+Indices:
+- idx_queue_status_sched(status, scheduled_for)
+
+RLS: habilitado.
+Policies:
+- queue owner read: select usando auth.uid() = user_id
+- queue admin all: all usando public.is_admin(auth.uid())
+
+Trigger:
+- trg_queue_updated: before update -> public.tg_set_updated_at()
+
+
+2.14 public.ai_documents
+Colunas:
+- id uuid primary key default gen_random_uuid()
+- user_id uuid not null references auth.users(id) on delete cascade
+- title text
+- content text not null
+- source text
+- embedding vector(1536)
+- created_at timestamptz not null default now()
+
+Indices:
+- idx_ai_docs_user(user_id)
+- idx_ai_docs_embedding usando ivfflat (embedding vector_cosine_ops), lists=100
+
+RLS: habilitado.
+Policy:
+- aidocs owner all: all usando auth.uid() = user_id
+
+Funcoes:
+- public.match_ai_documents(uuid, vector(1536), int)
+
+
+2.15 public.top_up_packages
+Colunas:
+- id uuid primary key default gen_random_uuid()
+- name text not null
+- messages integer not null
+- price_kz numeric(12,2) not null
+- is_active boolean not null default true
+- position integer not null default 0
+- created_at timestamptz not null default now()
+
+RLS: habilitado.
+Policies:
+- pkg public read: select using true
+- pkg admin all: all usando public.is_admin(auth.uid())
+
+Seed conhecido:
+- Muwoyo Small: 500 / 7500
+- Muwoyo Medium: 1000 / 14000
+- Muwoyo Medium II: 2500 / 30000
+- Muwoyo Big: 5000 / 65000
+
+
+2.16 public.top_up_requests
+Colunas base:
+- id uuid primary key default gen_random_uuid()
+- user_id uuid not null references auth.users(id) on delete cascade
+- package_id uuid references public.top_up_packages(id) on delete set null
+- messages integer not null
+- amount_kz numeric(12,2) not null
+- status text not null default 'pending'
+- created_at timestamptz not null default now()
+- approved_at timestamptz
+- approved_by uuid references auth.users(id) on delete set null
+
+Alteracoes:
+- request_type text not null default 'top_up'
+- payment_reference text
+- confirmed_at timestamptz
+
+Indices:
+- top_up_requests_type_status_idx(request_type, status)
+
+RLS: habilitado.
+Policies:
+- topup self read: select usando auth.uid() = user_id
+- topup self insert: insert com auth.uid() = user_id
+- topup admin all: all usando public.is_admin(auth.uid())
+
+Triggers:
+- trg_protect_setup_request: before insert -> public.protect_setup_request()
+- trg_top_up_mark_profile_activity: migration 20260822020000
+
+Funcoes:
+- request_setup_payment()
+- confirm_setup_payment(...)
+
+
+2.17 public.categories
+Migration: 20260502095407_1ef0b054-d2b8-494a-8266-8d01e985b2b8.sql
+- id uuid primary key default gen_random_uuid()
+- user_id uuid not null
+- name text not null
+- created_at timestamptz not null default now()
+- unique(user_id, name)
+
+RLS: habilitado.
+Policies:
+- categories owner all: all usando auth.uid() = user_id
+- categories public read: select using true
+
+FK de user_id nao foi declarada nesta migration.
+
+
+2.18 public.product_reviews
+- id uuid primary key default gen_random_uuid()
+- product_id uuid not null
+- reviewer_name text
+- rating integer not null check (rating between 1 and 5)
+- comment text
+- created_at timestamptz not null default now()
+
+RLS: habilitado.
+Policies:
+- reviews public read: select using true
+- reviews public insert: insert with check true
+
+FK de product_id nao foi declarada nesta migration.
+
+Trigger:
+- trg_update_product_rating: after insert or delete -> public.update_product_rating()
+
+
+2.19 public.store_carousel_slides
+- id uuid primary key default gen_random_uuid()
+- store_id uuid not null
+- user_id uuid not null
+- title text
+- subtitle text
+- image_url text
+- bg_color text default '#16a34a'
+- link_url text
+- position integer not null default 0
+- created_at timestamptz not null default now()
+
+RLS: habilitado.
+Policies:
+- slides owner all: all usando auth.uid() = user_id
+- slides public read: select using true
+
+FKs de store_id e user_id nao foram declaradas nesta migration.
+
+
+2.20 public.product_variants
+- id uuid primary key default gen_random_uuid()
+- user_id uuid not null
+- product_id uuid not null
+- name text not null
+- description text
+- price numeric default 0
+- stock integer
+- image_url text
+- sort_order integer not null default 0
+- created_at timestamptz not null default now()
+- updated_at timestamptz not null default now()
+
+RLS: habilitado.
+Policies:
+- Users manage own product variants: all para authenticated usando auth.uid() = user_id
+- Public can view active product variants: select para anon/authenticated quando existe produto ativo
+
+Trigger:
+- update_product_variants_updated_at: before update -> public.update_updated_at_column()
+
+FKs nao foram declaradas nesta migration.
+
+
+2.21 public.ai_models
+- id uuid primary key default gen_random_uuid()
+- model_name text not null unique
+- input_cost_per_1m_usd numeric(18,8) not null check >= 0
+- output_cost_per_1m_usd numeric(18,8) not null check >= 0
+- estimated_tokens_per_message integer not null check > 0
+- created_at timestamptz not null default now()
+- updated_at timestamptz not null default now()
+
+RLS: habilitado.
+Policies:
+- ai_models_read_all: select using true
+- ai_models_admin_write: all usando public.is_admin(auth.uid())
+
+Trigger de updated_at: nao encontrado nesta migration.
+
+
+2.22 public.user_ai_deposits
+- id uuid primary key default gen_random_uuid()
+- user_id uuid not null references auth.users(id) on delete cascade
+- amount_usd numeric(18,8) not null check >= 0
+- description text
+- created_at timestamptz not null default now()
+- created_by uuid references auth.users(id)
+
+Indices:
+- idx_ai_deposits_user_created(user_id, created_at desc)
+
+RLS: habilitado.
+Policies:
+- deposits_self_read: select usando auth.uid() = user_id ou admin
+- deposits_admin_write: all usando public.is_admin(auth.uid())
+
+
+2.23 public.ai_usage_events
+- id uuid primary key default gen_random_uuid()
+- user_id uuid not null references auth.users(id) on delete cascade
+- execution_id text
+- workflow_name text
+- workflow_id text
+- model_id uuid not null references public.ai_models(id)
+- prompt_tokens bigint not null default 0 check >= 0
+- completion_tokens bigint not null default 0 check >= 0
+- total_tokens bigint not null default 0 check >= 0
+- cost_usd numeric(18,8) not null check >= 0
+- created_at timestamptz not null default now()
+
+Indices:
+- idx_ai_usage_user_created(user_id, created_at desc)
+- idx_ai_usage_model(model_id)
+- idx_ai_usage_execution(execution_id)
+
+RLS: habilitado.
+Policies:
+- usage_self_read: select usando auth.uid() = user_id ou admin
+- usage_insert_own: insert com auth.uid() = user_id
+
+Trigger:
+- trg_set_ai_usage_totals: before insert ou update de prompt_tokens/completion_tokens -> public.set_ai_usage_totals()
+
+
+2.24 public.user_ai_balances
+- user_id uuid primary key references auth.users(id) on delete cascade
+- total_deposited_usd numeric(18,8) not null default 0 check >= 0
+- total_spent_usd numeric(18,8) not null default 0 check >= 0
+- updated_at timestamptz not null default now()
+
+RLS: habilitado.
+Policies:
+- balances_self_read: select usando auth.uid() = user_id ou admin
+- balances_admin_write: all usando public.is_admin(auth.uid())
+
+
+2.25 public.human_transfer_requests
+- id uuid primary key default gen_random_uuid()
+- user_id uuid not null references auth.users(id) on delete cascade
+- customer_name text
+- customer_phone text not null
+- customer_email text
+- customer_notes text
+- transfer_status text not null default 'off' check in ('on','off')
+- transfer_reason text
+- transferred_at timestamptz
+- reopened_at timestamptz
+- created_at timestamptz not null default now()
+- updated_at timestamptz not null default now()
+- created_by uuid references auth.users(id)
+
+Indices:
+- idx_human_transfer_user_status(user_id, transfer_status, updated_at desc)
+- idx_human_transfer_phone(customer_phone)
+
+RLS: habilitado.
+Policies:
+- human_transfer_self_read: select usando auth.uid() = user_id ou admin
+- human_transfer_self_insert: insert com auth.uid() = user_id
+- human_transfer_admin_write: all usando public.is_admin(auth.uid())
+
+Trigger:
+- trg_touch_human_transfer_requests: before update -> public.touch_human_transfer_requests()
+- trg_notify_on_human_transfer: migration 20260810_add_transfer_phone_and_human_notify.sql
+
+
+2.26 public.web_push_subscriptions
+- id uuid primary key default gen_random_uuid()
+- user_id uuid references auth.users(id) on delete cascade
+- endpoint text not null unique
+- p256dh text
+- auth text
+- created_at timestamptz not null default now()
+- updated_at timestamptz not null default now()
+
+Indices:
+- idx_web_push_subscriptions_user(user_id)
+- idx_web_push_subscriptions_endpoint(endpoint)
+
+RLS: habilitado.
+Policies:
+- web_push_subscriptions_select_self_or_admin
+- web_push_subscriptions_insert_self_or_admin
+- web_push_subscriptions_update_self_or_admin
+- web_push_subscriptions_delete_self_or_admin
+Todas com regra auth.uid() = user_id ou public.is_admin(auth.uid()).
+
+Trigger:
+- trg_touch_web_push_subscriptions: before update -> public.touch_web_push_subscriptions()
+
+View:
+- public.v_web_push_subscriptions_by_user
+
+Observacao de fluxo:
+- src/lib/web-push.ts envia user_id, endpoint e keys no nivel raiz.
+- supabase/functions/subscribe/index.ts espera body.subscription.endpoint e body.subscription.keys.
+- O contrato e incompatível no estado atual do repositorio.
+
+
+2.27 public.push_dispatch_queue
+- id uuid primary key default gen_random_uuid()
+- notification_id uuid not null references public.notifications(id) on delete cascade
+- processed boolean not null default false
+- created_at timestamptz not null default now()
+
+Indices:
+- idx_push_dispatch_notification(notification_id)
+
+RLS: a migration de criacao nao habilita RLS nem cria policies.
+
+Trigger relacionado na origem:
+- trg_enqueue_push_dispatch em notifications, after insert -> public.enqueue_push_dispatch()
+
+
+2.28 public.credit_ledger
+- id uuid primary key default gen_random_uuid()
+- user_id uuid not null references auth.users(id) on delete cascade
+- amount integer not null check (amount <> 0)
+- credit_type text not null
+- reference_id uuid
+- created_by uuid references auth.users(id) on delete set null
+- created_at timestamptz not null default now()
+
+Indices:
+- credit_ledger_user_created_idx(user_id, created_at desc)
+- credit_ledger_trial_once_idx unique parcial por user_id quando credit_type = 'trial'
+- credit_ledger_activation_once_idx unique parcial por user_id quando credit_type = 'activation_bonus'
+
+RLS: habilitado.
+Policies:
+- credit ledger self read: select para authenticated usando auth.uid() = user_id
+- credit ledger admin read: select para authenticated usando public.is_admin(auth.uid())
+
+Escrita por:
+- handle_new_user em versao comercial antiga
+- start_trial_on_whatsapp_connection
+- activate_account
+- confirmacoes de fluxo comercial
+
+
+2.29 public.email_verifications
+- id uuid primary key default gen_random_uuid()
+- user_id uuid not null references auth.users(id) on delete cascade
+- email text not null
+- code_hash text not null
+- expires_at timestamptz not null
+- attempts integer not null default 0 check >= 0
+- max_attempts integer not null default 5 check > 0
+- consumed_at timestamptz
+- created_at timestamptz not null default now()
+- last_sent_at timestamptz not null default now()
+
+Indices:
+- email_verifications_user_created_idx(user_id, created_at desc)
+- email_verifications_expiry_idx(expires_at)
+
+RLS: habilitado.
+Acesso revogado para anon e authenticated; Edge Functions usam service_role.
+Policies publicas explicitas: nenhuma encontrada.
+
+Funcoes relacionadas:
+- release_trial_credits_after_email_verification(uuid)
+- cleanup_expired_email_verifications()
+
+
+2.30 public.email_dispatch_events
+- id uuid primary key default gen_random_uuid()
+- event_key text not null unique
+- user_id uuid not null references auth.users(id) on delete cascade
+- template_type text not null check in ('otp','welcome','trial_start','trial_expired','low_credits')
+- payload jsonb not null
+- created_at timestamptz not null default now()
+
+Indices:
+- email_dispatch_events_user_created_idx(user_id, created_at desc)
+
+RLS: habilitado.
+Acesso revogado para anon e authenticated; policies publicas explicitas nao encontradas.
+
+Funcoes relacionadas:
+- invoke_email_edge_function(text, jsonb)
+- dispatch_email_once(text, uuid, text, jsonb)
+
+
+2.31 public.tutorial_videos
+- id uuid primary key default gen_random_uuid()
+- title text not null
+- description text
+- video_url text not null
+- position integer not null default 0
+- is_published boolean not null default true
+- created_at timestamptz not null default now()
+- updated_at timestamptz not null default now()
+
+Alteracoes/uso posterior:
+- frontend tambem seleciona subtitle e cover_url; essas colunas nao aparecem na CREATE TABLE local mostrada e precisam de confirmacao
+
+Indices:
+- tutorial_videos_position_idx(position, created_at)
+
+RLS: habilitado.
+Policies:
+- published tutorials are public: select usando is_published = true
+- admins manage tutorials: all usando public.is_admin(auth.uid())
+
+Trigger:
+- trg_tutorial_videos_updated: before update -> public.tg_set_updated_at()
+
+Storage relacionado:
+- tutorial-media
+
+
+2.32 public.password_reset_codes
+- id uuid primary key default gen_random_uuid()
+- user_id uuid not null references auth.users(id) on delete cascade
+- email text not null
+- code_hash text not null
+- expires_at timestamptz not null
+- attempts integer not null default 0 check >= 0
+- max_attempts integer not null default 5 check > 0
+- consumed_at timestamptz
+- created_at timestamptz not null default now()
+- last_sent_at timestamptz not null default now()
+
+Indices:
+- password_reset_codes_lookup_idx(user_id, email, created_at desc)
+
+RLS: habilitado.
+Acesso revogado para anon e authenticated; policies publicas explicitas nao encontradas.
+
+
+2.33 public.password_reset_tokens
+- id uuid primary key default gen_random_uuid()
+- user_id uuid not null references auth.users(id) on delete cascade
+- token_hash text not null unique
+- expires_at timestamptz not null
+- consumed_at timestamptz
+- created_at timestamptz not null default now()
+
+Indices:
+- password_reset_tokens_lookup_idx(user_id, expires_at)
+
+RLS: habilitado.
+Acesso revogado para anon e authenticated; policies publicas explicitas nao encontradas.
+
+
+============================================================
+3. TABELAS USADAS PELO SITE SEM DEFINICAO LOCAL COMPLETA
+============================================================
+
+3.1 affiliate_profiles
+Uso encontrado em:
+- src/pages/Affiliates.tsx
+- src/pages/AdminAffiliates.tsx
+- src/pages/Settings.tsx
+- src/components/WithdrawalDialog.tsx
+
+Colunas observadas no uso:
+- id
+- user_id
+- affiliate_code
+- iban
+- account_holder_name
+- bank_name
+- created_at
+- updated_at
+
+Status: SEM DEFINICAO LOCAL COMPLETA.
+Nao e possivel confirmar no repositorio:
+- tipos
+- primary key
+- foreign keys
+- unique constraints
+- RLS
+- policies
+- triggers
+- indices
+
+
+3.2 affiliate_commissions
+Uso encontrado em:
+- src/pages/Affiliates.tsx
+- src/pages/AdminAffiliates.tsx
+
+Colunas observadas:
+- id
+- affiliate_id
+- amount_kz
+- movement_type
+- source
+- description
+- created_at
+- related_transaction_id
+
+Status: SEM DEFINICAO LOCAL COMPLETA.
+
+
+3.3 affiliate_withdrawal_requests
+Uso encontrado em:
+- src/pages/Affiliates.tsx
+- src/pages/AdminAffiliates.tsx
+
+Colunas observadas:
+- id
+- transaction_id
+- payment_id
+- affiliate_id
+- amount_kz
+- status
+- requested_at
+- paid_at
+- payment_reference
+- iban
+- account_holder_name
+- bank_name
+
+Status: SEM DEFINICAO LOCAL COMPLETA.
+
+RPCs relacionadas:
+- create_affiliate_profile
+- request_affiliate_withdrawal
+- pay_affiliate_withdrawal
+
+Estado dessas tabelas/RPCs: NAO CONFIRMADO NO BANCO com base apenas neste repositorio.
+
+
+============================================================
+4. AUTH.USERS E STORAGE
+============================================================
+
+4.1 auth.users
+Tabela interna do Supabase Auth. Nao possui CREATE TABLE local.
+Campos usados pelo projeto:
+- id
+- email
+- email_confirmed_at
+- raw_user_meta_data
+
+Relacionamentos locais:
+- profiles.user_id
+- profiles.created_by
+- user_roles.user_id
+- instances.user_id
+- messages.user_id
+- notifications.user_id
+- top_up_requests.user_id
+- credit_ledger.user_id
+- email_verifications.user_id
+- password_reset_codes.user_id
+- password_reset_tokens.user_id
+- demais FKs declaradas nas tabelas deste relatorio
+
+Triggers locais sobre auth.users:
+- on_auth_user_created -> public.handle_new_user()
+- on_auth_user_created_instance -> public.create_instance_on_signup()
+- trg_email_on_user_verified -> public.email_on_user_verified()
+
+Estado efetivo desses triggers: NAO CONFIRMADO NO BANCO.
+
+
+4.2 storage.objects
+Policies encontradas por bucket:
+
+store-assets:
+- leitura publica
+- upload por usuario autenticado quando primeira pasta = auth.uid()
+- update por usuario autenticado quando primeira pasta = auth.uid()
+- delete por usuario autenticado quando primeira pasta = auth.uid()
+
+business-docs:
+- leitura por usuario autenticado quando primeira pasta = auth.uid()
+- upload por usuario autenticado quando primeira pasta = auth.uid()
+- delete por usuario autenticado quando primeira pasta = auth.uid()
+
+notification-images:
+- leitura publica
+- upload autenticado
+
+avatars:
+- leitura publica
+- upload autenticado
+- update autenticado
+
+Tutorial media:
+- policies de admin upload/update/delete e leitura publica aparecem em 20260820000000_tutorial_media.sql
+- bucket tutorial-media e usado no frontend
+
+Buckets criados ou usados no repositorio:
+- store-assets
+- business-docs
+- notification-images
+- avatars
+- tutorial-media
+
+O estado real dos buckets e policies exige consulta ao Storage do projeto.
+
+
+============================================================
+5. VIEWS
+============================================================
+
+public.v_web_push_subscriptions_by_user
+Colunas projetadas:
+- id
+- user_id
+- endpoint
+- p256dh
+- auth
+- created_at
+- updated_at
+Origem: public.web_push_subscriptions.
+
+public.v_ai_user_balance_dashboard
+Colunas projetadas:
+- user_id
+- total_depositado_usd
+- total_gasto_usd
+- saldo_atual_usd
+- mensagens_restantes_estimadas
+Origem:
+- user_ai_deposits
+- ai_usage_events
+- ai_models
+
+
+============================================================
+6. ENUMS E EXTENSOES
+============================================================
+
+Enums encontrados:
+- public.app_role: admin, sub_admin, client
+- public.instance_status: pending, connecting, connected, disconnected
+- public.message_direction: inbound, outbound
+- public.message_kind: text, audio, image, video, document, sticker, location, contact, other
+- public.queue_status: pending, processing, sent, failed, delivered
+
+Extensoes encontradas:
+- pgcrypto
+- vector
+- pg_net
+- supabase_vault
+- pg_cron, criada/tentada na migration de trial
+
+
+============================================================
+7. CONCLUSOES DE DIAGNOSTICO
+============================================================
+
+CONFIRMADO NO REPOSITORIO:
+- As tabelas principais do site e suas migrations estao espalhadas por varias datas.
+- Muitas tabelas tem RLS habilitado.
+- O projeto usa service_role nas Edge Functions para acessar tabelas protegidas.
+- Existem tabelas usadas pelo frontend sem CREATE TABLE local completo encontrado, especialmente afiliados.
+- Existem alteracoes posteriores de colunas em profiles, stores, products, instances, top_up_requests e tutorial_videos.
+- Existem policies duplicadas ou adicionadas em migrations diferentes para alguns objetos.
+- O contrato de subscribe permanece incompatível: frontend envia endpoint/keys no topo e backend espera subscription.endpoint/subscription.keys.
+
+NAO CONFIRMADO — NECESSITA VERIFICACAO NO BANCO/AMBIENTE SUPABASE:
+- quais migrations foram efetivamente aplicadas
+- estrutura final real de profiles e tutorial_videos
+- policies efetivas depois de todas as migrations
+- triggers efetivamente existentes e ordem de execucao
+- deploy das Edge Functions password-reset e subscribe
+- existencia e estrutura das tabelas de afiliados
+- existencia dos buckets Storage
+- secrets, Vault, pg_net e pg_cron em producao
+- estado real de auth.users e seus triggers
+
+Nenhum arquivo, migration, configuracao ou banco foi alterado para produzir este relatorio.
