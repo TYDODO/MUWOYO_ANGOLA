@@ -6,14 +6,24 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const ZEPTO_MAIL_API_KEY = Deno.env.get("ZEPTOMAIL_API_KEY") || "";
 const ZEPTO_MAIL_ENDPOINT = Deno.env.get("ZEPTO_MAIL_ENDPOINT") || "https://api.zeptomail.com/v1.1/email";
 const ZEPTO_MAIL_FROM = Deno.env.get("ZEPTO_MAIL_FROM") || "noreply@muwoyo.com";
 const ZEPTO_MAIL_FROM_NAME = Deno.env.get("ZEPTO_MAIL_FROM_NAME") || "MUWOYO";
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-type TemplateType = "otp" | "welcome" | "trial_start" | "trial_expired" | "low_credits" | "password_reset";
-type Body = { to?: { email: string; name?: string } | string; template_type?: TemplateType; template_data?: Record<string, unknown> };
+type TemplateType = "otp" | "welcome" | "trial_start" | "trial_expired" | "low_credits" | "password_reset" | "payment_confirmed" | "plan_expiring";
+type Body = { to?: { email: string; name?: string } | string; template_type?: TemplateType; template_data?: Record<string, unknown>; event_key?: string };
+
+const TEMPLATE_TYPES: TemplateType[] = ["otp", "welcome", "trial_start", "trial_expired", "low_credits", "password_reset", "payment_confirmed", "plan_expiring", "trial_expiring_1_day", "trial_last_day"];
+
+async function updateDispatchEvent(eventKey: string | undefined, processed: boolean, lastError: string | null) {
+  if (!eventKey || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return;
+  const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  const { error } = await admin.from("email_dispatch_events").update({ processed, last_error: lastError }).eq("event_key", eventKey);
+  if (error) console.error("Email dispatch status update failed", error.message);
+}
 
 function escapeHtml(value: unknown) {
   return String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char] || char));
@@ -28,6 +38,9 @@ function renderTemplate(type: TemplateType, data: Record<string, unknown>) {
   const name = escapeHtml(data.name || "Cliente");
   const remaining = escapeHtml(data.remaining ?? "0");
   const code = escapeHtml(data.code || "");
+  const planName = escapeHtml(data.plan_name || "Muwoyo");
+  const days = Number(data.days ?? 0);
+  const expiresAt = data.expires_at ? new Date(String(data.expires_at)).toLocaleDateString("pt-AO", { timeZone: "Africa/Luanda" }) : "";
   const content: Record<TemplateType, { subject: string; title: string; body: string }> = {
     otp: { subject: "Confirme o seu e-mail na Muwoyo", title: "Confirme o seu e-mail", body: `<p>O seu código de confirmação é:</p><p style="font-size:32px;font-weight:700;letter-spacing:8px">${code}</p><p>Este código expira em 10 minutos.</p>` },
     welcome: { subject: "Bem-vindo à Muwoyo", title: "É um prazer receber você", body: `<p>Olá, ${name}.</p><p>Seja muito bem-vindo à Muwoyo. A sua conta foi confirmada com sucesso e estamos felizes por acompanhar o crescimento do seu negócio.</p><p>A partir de agora, pode configurar as informações da sua empresa, organizar os seus produtos e preparar o atendimento no WhatsApp com mais tranquilidade.</p><p>Conte connosco para tornar o seu atendimento mais rápido, organizado e disponível.</p>` },
@@ -35,6 +48,10 @@ function renderTemplate(type: TemplateType, data: Record<string, unknown>) {
     trial_expired: { subject: "O seu teste Muwoyo chegou ao fim", title: "Obrigado por experimentar a Muwoyo", body: `<p>Olá, ${name}.</p><p>Esperamos que o período de teste tenha ajudado você a conhecer melhor as possibilidades da Muwoyo.</p><p>As suas mensagens gratuitas terminaram. Para continuar a atender os seus clientes com a Inteligência Artificial, conclua a ativação da sua conta.</p><p>Quando estiver pronto, a nossa equipa estará disponível para ajudar você a dar o próximo passo.</p>` },
     low_credits: { subject: "O seu saldo Muwoyo está quase a terminar", title: "Está quase na hora de recarregar", body: `<p>Olá, ${name}.</p><p>O seu saldo está a chegar ao fim e restam apenas <strong>${remaining}</strong> mensagens.</p><p>Para manter o atendimento da sua empresa sem interrupções, pode escolher uma recarga no painel quando for conveniente.</p><p>Assim, a Muwoyo continua disponível para acompanhar os seus clientes e as suas oportunidades.</p>` },
     password_reset: { subject: "Código para recuperar a sua senha Muwoyo", title: "Recuperação de senha", body: `<p>Olá, ${name}.</p><p>Recebemos um pedido para recuperar o acesso à sua conta.</p><p>O seu código de 6 dígitos é:</p><p style="font-size:32px;font-weight:700;letter-spacing:8px">${code}</p><p>Este código expira em 10 minutos. Se não fez este pedido, ignore este email.</p>` },
+    payment_confirmed: { subject: "Pagamento confirmado na Muwoyo", title: "Pagamento confirmado", body: data.awaiting_activation === true ? `<p>Olá, ${name}.</p><p>Confirmámos o seu pagamento. A sua conta aguarda agora a ativação pela equipa Muwoyo.</p><p>Você receberá uma nova notificação assim que a ativação for concluída.</p>` : `<p>Olá, ${name}.</p><p>Confirmámos o pagamento do plano <strong>${planName}</strong>.</p><p>O plano está ativo${expiresAt ? ` até <strong>${escapeHtml(expiresAt)}</strong>` : ""}. Obrigado por escolher a Muwoyo.</p>` },
+    plan_expiring: { subject: days === 0 ? "O seu plano Muwoyo expira hoje" : `O seu plano Muwoyo expira em ${days} dias`, title: days === 0 ? "O seu plano expira hoje" : `Faltam ${days} dias para a expiração`, body: `<p>Olá, ${name}.</p><p>O plano <strong>${planName}</strong> ${days === 0 ? "expira hoje" : `expira em ${days} dias`}${expiresAt ? `, no dia <strong>${escapeHtml(expiresAt)}</strong>` : ""}.</p><p>Renove o seu plano na área de faturação para manter o acesso às funcionalidades da Muwoyo.</p>` },
+    trial_expiring_1_day: { subject: "O seu teste Muwoyo termina amanhã", title: "Falta 1 dia para terminar o teste", body: `<p>Olá, ${name}.</p><p>Falta 1 dia para terminar o seu teste gratuito. Escolha um plano para continuar a utilizar a Muwoyo.</p>` },
+    trial_last_day: { subject: "O seu teste Muwoyo termina hoje", title: "Último dia de teste", body: `<p>Olá, ${name}.</p><p>Hoje é o último dia do seu teste gratuito. Escolha um plano para continuar a utilizar a Muwoyo.</p>` },
   };
   const selected = content[type];
   return {
@@ -48,12 +65,18 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ success: false, error: "method_not_allowed" }, 405);
   const authorization = req.headers.get("Authorization");
   if (!SUPABASE_SERVICE_ROLE_KEY || authorization !== `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`) return json({ success: false, error: "unauthorized" }, 401);
-  if (!ZEPTO_MAIL_API_KEY) return json({ success: false, error: "not_configured" }, 503);
 
   try {
     const body = await req.json() as Body;
     const to = recipient(body.to);
-    if (!to.email || !body.template_type) return json({ success: false, error: "invalid_payload" }, 400);
+    if (!to.email || !body.template_type || !TEMPLATE_TYPES.includes(body.template_type)) {
+      await updateDispatchEvent(body.event_key, false, "invalid_payload");
+      return json({ success: false, error: "invalid_payload" }, 400);
+    }
+    if (!ZEPTO_MAIL_API_KEY) {
+      await updateDispatchEvent(body.event_key, false, "not_configured");
+      return json({ success: false, error: "not_configured" }, 503);
+    }
     const template = renderTemplate(body.template_type, body.template_data || {});
     const response = await fetch(ZEPTO_MAIL_ENDPOINT, {
       method: "POST",
@@ -61,9 +84,11 @@ Deno.serve(async (req) => {
       body: JSON.stringify({ from: { address: ZEPTO_MAIL_FROM, name: ZEPTO_MAIL_FROM_NAME }, to: [{ email_address: { address: to.email, name: to.name } }], subject: template.subject, htmlbody: template.htmlbody }),
     });
     if (!response.ok) {
-      console.error("ZeptoMail error", response.status, await response.text());
+      console.error("ZeptoMail error", response.status);
+      await updateDispatchEvent(body.event_key, false, `provider_error:${response.status}`);
       return json({ success: false, error: "provider_error" }, 502);
     }
+    await updateDispatchEvent(body.event_key, true, null);
     return json({ success: true });
   } catch (error) {
     console.error("send-email error", error);

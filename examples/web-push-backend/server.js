@@ -1,5 +1,6 @@
 import express from 'express';
 import webpush from 'web-push';
+import { timingSafeEqual } from 'node:crypto';
 
 const app = express();
 app.use(express.json());
@@ -9,6 +10,7 @@ const subscriptions = new Map();
 const vapidPublicKey = process.env.VAPID_PUBLIC_KEY;
 const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
 const vapidMailto = process.env.VAPID_MAILTO;
+const backendToken = process.env.WEB_PUSH_BACKEND_TOKEN || '';
 
 if (!vapidPublicKey || !vapidPrivateKey || !vapidMailto) {
   throw new Error('Defina VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY e VAPID_MAILTO no ambiente.');
@@ -57,6 +59,7 @@ app.post('/api/push/subscribe', async (req, res) => {
 });
 
 app.get('/api/push/subscriptions', (_req, res) => {
+  if (!isAuthorized(_req)) return res.status(401).json({ error: 'unauthorized' });
   const list = Array.from(subscriptions.values()).map((entry) => ({
     user_id: entry.user_id,
     endpoint: entry.subscription.endpoint,
@@ -66,6 +69,8 @@ app.get('/api/push/subscriptions', (_req, res) => {
 });
 
 app.post('/api/push/send', async (req, res) => {
+  if (!backendToken) return res.status(503).json({ error: 'Push backend token is not configured' });
+  if (!isAuthorized(req)) return res.status(401).json({ error: 'unauthorized' });
   try {
     const { user_id, subscription, data } = req.body;
     const stored = subscriptions.get(user_id || subscription?.endpoint);
@@ -93,6 +98,13 @@ app.post('/api/push/send', async (req, res) => {
     return res.status(500).json({ error: error.message || 'Falha ao enviar push.' });
   }
 });
+
+function isAuthorized(req) {
+  if (!backendToken) return false;
+  const supplied = Buffer.from((req.get('authorization') || '').replace(/^Bearer\s+/i, ''));
+  const expected = Buffer.from(backendToken);
+  return expected.length === supplied.length && timingSafeEqual(expected, supplied);
+}
 
 export async function sendPushNotification(subscription, data) {
   await webpush.sendNotification(subscription, JSON.stringify(data));

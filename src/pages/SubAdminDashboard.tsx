@@ -23,7 +23,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { RoleFixer } from "@/components/RoleFixer";
 import { useRole } from "@/hooks/useRole";
 import UserGrowthChart from "@/components/UserGrowthChart";
 
@@ -173,12 +172,8 @@ export default function SubAdminDashboard() {
   if (!role || role === "client") {
     return (
       <AdminShell mode="sub" title="Muwoyo Gestor">
-        <div className="container mx-auto p-6">
-          <RoleFixer
-            userId={user?.id || ""}
-            currentRole={role}
-            onRoleUpdated={() => window.location.reload()}
-          />
+        <div className="container mx-auto p-6 text-sm text-muted-foreground">
+          Esta conta não tem permissões para aceder à gestão de subadmins.
         </div>
       </AdminShell>
     );

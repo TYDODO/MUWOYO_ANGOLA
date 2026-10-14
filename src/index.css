@@ -30,7 +30,8 @@
     [data-inbox] {
       display: block;
       min-height: 0;
-      height: calc(100dvh - 8rem);
+      height: calc(100dvh - 0.5rem);
+      max-height: calc(100dvh - 0.5rem);
     }
 
     [data-inbox] > div {

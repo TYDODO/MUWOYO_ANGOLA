@@ -129,12 +129,14 @@ export default function DashboardShell({
   description,
   accountStatus,
   wide = false,
+  mobileFullscreen = false,
 }: {
   children: ReactNode;
   title: string;
   description?: string;
   accountStatus?: string;
   wide?: boolean;
+  mobileFullscreen?: boolean;
 }) {
   const { user } = useAuth();
   const [currentAccountStatus, setCurrentAccountStatus] = useState(accountStatus || "trial");
@@ -181,7 +183,7 @@ export default function DashboardShell({
         <SidebarContent collapsed={sidebarCollapsed} planDaysRemaining={planDaysRemaining} expiryLabel={expiryLabel} />
       </div>
       <div className={sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}>
-        <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
+        <header className={`${mobileFullscreen ? "hidden lg:block" : ""} sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur`}>
           <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:h-20 lg:px-10">
             <div className="flex items-center gap-3">
               <Sheet>
@@ -225,7 +227,7 @@ export default function DashboardShell({
             </div>
           </div>
         </header>
-        <main className={`${wide ? "w-full" : "mx-auto max-w-7xl"} space-y-5 px-4 py-5 sm:px-6 lg:px-10 lg:py-6`}>
+        <main className={`${wide ? "w-full" : "mx-auto max-w-7xl"} ${mobileFullscreen ? "space-y-0 px-0 py-0 lg:space-y-5 lg:px-10 lg:py-6" : "space-y-5 px-4 py-5 sm:px-6 lg:px-10 lg:py-6"}`}>
           {children}
         </main>
       </div>

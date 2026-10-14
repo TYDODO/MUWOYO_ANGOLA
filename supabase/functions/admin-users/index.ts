@@ -42,23 +42,17 @@ async function getActor(req: Request) {
     .from("user_roles")
     .select("role")
     .eq("user_id", data.user.id);
-  if (roleError) {
-    console.log("getActor: Error fetching role", roleError);
-  }
-  if (!roleRows?.length) {
-    console.log(
-      `getActor: No role found for user ${data.user.id}, creating default role`,
-    );
-    // Se não houver role, criar role padrão
-    await admin
-      .from("user_roles")
-      .insert({ user_id: data.user.id, role: "client" });
-  }
-  const role = roleRows?.some((row) => row.role === "admin")
+  if (roleError) throw new Error(`role_lookup_failed: ${roleError.message}`);
+  const { data: isPrimaryAdmin, error: adminCheckError } = await admin.rpc("is_admin", { _user_id: data.user.id });
+  if (adminCheckError) throw new Error(`admin_identity_lookup_failed: ${adminCheckError.message}`);
+  const role = isPrimaryAdmin
     ? "admin"
     : roleRows?.some((row) => row.role === "sub_admin")
       ? "sub_admin"
-      : "client";
+      : roleRows?.some((row) => row.role === "client")
+        ? "client"
+        : null;
+  if (!role) return null;
   console.log(
     `getActor: User ${data.user.id} (${data.user.email}) has role: ${role}`,
   );
@@ -88,6 +82,9 @@ async function notifyAdmins(
 }
 
 async function canManageTarget(admin: any, actor: { role: string; user: { id: string } }, userId: string) {
+  const { data: isPrimaryAdmin, error: adminCheckError } = await admin.rpc("is_admin", { _user_id: userId });
+  if (adminCheckError) throw new Error(`admin_identity_lookup_failed: ${adminCheckError.message}`);
+  if (isPrimaryAdmin) return false;
   if (actor.role === "admin") return true;
   const { data, error } = await admin
     .from("profiles")

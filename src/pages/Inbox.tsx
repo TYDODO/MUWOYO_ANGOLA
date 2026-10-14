@@ -958,16 +958,18 @@ export default function Inbox() {
   return (
     <DashboardShell
       wide
+      mobileFullscreen
       title={entitlements.sharedInbox ? "Shared Inbox" : "Inbox"}
       description="Converse com clientes e acompanhe o contexto do CRM."
     >
       <div
         data-inbox
         data-has-selection={selected ? "true" : "false"}
-        className="grid h-[calc(100vh-10.5rem)] min-h-[560px] gap-3 overflow-hidden lg:grid-cols-[minmax(230px,30%)_minmax(0,70%)]"
+        className="grid h-dvh min-h-0 gap-3 overflow-hidden lg:h-[calc(100vh-10.5rem)] lg:min-h-[560px] lg:grid-cols-[minmax(230px,30%)_minmax(0,70%)]"
       >
         <Card className="inbox-conversation-list flex min-h-0 min-w-0 flex-col overflow-hidden border-0 shadow-none">
-          <CardHeader className="shrink-0 px-2 py-3">
+          <CardHeader className="shrink-0 px-2 py-2">
+            <div className="mb-1 px-1 text-sm font-semibold text-foreground lg:hidden">Inbox Muwoyo</div>
             <div className="flex items-center justify-between gap-2"><CardTitle className="text-sm">Conversas</CardTitle><Button size="sm" className="h-7 px-2 text-[11px]" disabled={syncing} onClick={() => void syncInbox()}>{syncing ? "A sincronizar..." : "Sincronizar"}</Button></div>
             <Button size="sm" className="mt-2 h-8 w-full" onClick={() => setNewConversationOpen(true)}>+ Nova conversa</Button>
             {instances.length > 1 && <select className="h-8 rounded-md border bg-background px-2 text-xs" value={activeInstance} onChange={(event) => { setActiveInstance(event.target.value); setSelected(null); setMessages([]); }}>{instances.map((instance) => <option key={instance.instance_name} value={instance.instance_name}>{instance.phone || instance.instance_name}</option>)}</select>}
@@ -1085,6 +1087,7 @@ export default function Inbox() {
         </Card>
         <Card className="inbox-chat-panel flex min-h-0 min-w-0 flex-col overflow-hidden border-[#d8d0c4] bg-[#efeae2]">
           <CardHeader className="shrink-0 border-b border-[#d8d0c4] bg-[#f7f3ed] py-2">
+            <div className="mb-1 text-sm font-semibold text-foreground lg:hidden">Inbox Muwoyo</div>
             <div className="flex items-center gap-2">
               <Button
                 className="lg:hidden"

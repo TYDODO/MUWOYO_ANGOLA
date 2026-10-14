@@ -17,14 +17,42 @@ async function actor(req: Request) {
   const admin = createClient(SUPABASE_URL, SERVICE_KEY);
   const { data } = await client.auth.getUser();
   if (!data.user) return null;
-  const { data: roles, error: roleError } = await admin.from("user_roles").select("role").eq("user_id", data.user.id);
+  const [{ data: roles, error: roleError }, { data: isPrimaryAdmin, error: adminCheckError }] = await Promise.all([
+    admin.from("user_roles").select("role").eq("user_id", data.user.id),
+    admin.rpc("is_admin", { _user_id: data.user.id }),
+  ]);
   if (roleError) throw new Error(`role_lookup_failed: ${roleError.message}`);
-  const role = roles?.some((row) => row.role === "admin")
+  if (adminCheckError) throw new Error(`admin_identity_lookup_failed: ${adminCheckError.message}`);
+  const role = isPrimaryAdmin
     ? "admin"
     : roles?.some((row) => row.role === "sub_admin")
       ? "sub_admin"
       : null;
   return role && { admin, user: data.user, role };
+}
+
+async function dispatchSetupPaymentEmail(admin: any, requestId: string, userId: string) {
+  const { data: profile, error: profileError } = await admin
+    .from("profiles")
+    .select("email,full_name")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (profileError || !profile?.email) {
+    console.warn("Setup payment confirmation email skipped", profileError?.message || "email_missing");
+    return;
+  }
+  const name = profile.full_name || profile.email;
+  const { error } = await admin.rpc("dispatch_email_once", {
+    p_event_key: `payment_confirmed:setup:${requestId}`,
+    p_user_id: userId,
+    p_template_type: "payment_confirmed",
+    p_payload: {
+      to: { email: profile.email, name },
+      template_type: "payment_confirmed",
+      template_data: { name, awaiting_activation: true },
+    },
+  });
+  if (error) console.error("Setup payment confirmation email enqueue failed", error);
 }
 
 Deno.serve(async (req) => {
@@ -71,6 +99,7 @@ Deno.serve(async (req) => {
         const { error: profileUpdateError } = await current.admin.from("profiles").update({ account_status: "awaiting_activation", setup_paid_at: now, setup_payment_id: requestId }).eq("user_id", request.user_id);
         if (requestUpdateError || profileUpdateError) return json({ error: requestUpdateError?.message || profileUpdateError?.message || "payment_confirmation_failed" }, 500);
         await current.admin.from("notifications").insert({ user_id: request.user_id, title: "Pagamento confirmado", message: "O seu pagamento foi confirmado. A sua conta aguarda ativação.", type: "setup_paid", link: "/dashboard" });
+        await dispatchSetupPaymentEmail(current.admin, requestId, request.user_id);
         return json({ ok: true, status: "awaiting_activation", fallback: true });
       }
       if (data?.status === "awaiting_activation") {
@@ -85,6 +114,44 @@ Deno.serve(async (req) => {
         for (const manager of managers || []) {
           await current.admin.from("notifications").insert({ user_id: manager.user_id, title: "Nova conta aguardando ativação", message: "Um setup foi confirmado e aguarda ativação.", type: "setup_awaiting_activation", link: "/admin" });
         }
+      }
+      const { data: confirmedRequest, error: confirmedRequestError } = await current.admin
+        .from("top_up_requests")
+        .select("user_id")
+        .eq("id", requestId)
+        .eq("request_type", "setup")
+        .maybeSingle();
+      if (confirmedRequestError) console.error("Confirmed setup lookup failed", confirmedRequestError);
+      if (confirmedRequest) await dispatchSetupPaymentEmail(current.admin, requestId, confirmedRequest.user_id);
+      return json(data);
+    }
+
+    if (action === "confirmPlanPayment") {
+      const subscriptionId = String(body.subscriptionId || "");
+      if (!subscriptionId) return json({ error: "invalid_input" }, 400);
+      const { data: subscription, error: subscriptionError } = await current.admin
+        .from("plan_subscriptions")
+        .select("id,user_id,status")
+        .eq("id", subscriptionId)
+        .maybeSingle();
+      if (subscriptionError || !subscription) return json({ error: subscriptionError?.message || "subscription_not_found" }, 404);
+      if (current.role === "sub_admin") {
+        const { data: owned, error: ownershipError } = await current.admin
+          .from("profiles")
+          .select("user_id")
+          .eq("user_id", subscription.user_id)
+          .eq("created_by", current.user.id)
+          .maybeSingle();
+        if (ownershipError || !owned) return json({ error: ownershipError?.message || "not_authorized_for_user" }, 403);
+      }
+      const { data, error } = await current.admin.rpc("confirm_plan_subscription", {
+        p_subscription_id: subscriptionId,
+        p_actor_id: current.user.id,
+        p_reference: null,
+      });
+      if (error) {
+        console.error("confirm_plan_subscription RPC failed", error);
+        return json({ error: "payment_confirmation_failed" }, 400);
       }
       return json(data);
     }
