@@ -35,6 +35,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import UserGrowthChart from "@/components/UserGrowthChart";
 import { useAuth } from "@/hooks/useAuth";
+import { buildAdminDashboardMetrics, type RangeKey } from "@/lib/admin-dashboard-metrics";
 
 type Row = {
   user_id: string;
@@ -64,6 +65,8 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState<Row[]>([]);
   const [subs, setSubs] = useState<Row[]>([]);
   const [filter, setFilter] = useState("all");
+  const [range, setRange] = useState<RangeKey>("30d");
+  const [metrics, setMetrics] = useState(() => buildAdminDashboardMetrics({ profiles: [], subscriptions: [], instances: [], range: "30d" }));
   const [createOpen, setCreateOpen] = useState(false);
   const [subOpen, setSubOpen] = useState(false);
   const [notice, setNotice] = useState({
@@ -104,27 +107,37 @@ export default function AdminDashboard() {
     window.localStorage.setItem(`muwoyo-admin-panel-${adminUser.id}`, JSON.stringify({ search, filter }));
   }, [adminUser, search, filter]);
   
-  const load = async () => {
-    const { data: profiles } = await sb
-      .from("profiles")
-      .select(
-        "user_id,full_name,phone,status,is_suspended,message_limit,messages_received,created_at,created_by,business_name,account_status,trial_started_at,acquisition_source,plan_id,subscription_expires_at",
-      )
-      .order("created_at", { ascending: false });
-    const { data: roles } = await sb.from("user_roles").select("user_id,role");
+  const load = async (nextRange: RangeKey = range) => {
+    const [{ data: profiles }, { data: subscriptions }, { data: instances }, { data: roles }] = await Promise.all([
+      sb.from("profiles").select(
+        "user_id,full_name,phone,status,is_suspended,message_limit,messages_received,created_at,created_by,business_name,account_status,trial_started_at,acquisition_source,plan_id,subscription_expires_at,onboarding_completed,province",
+      ).order("created_at", { ascending: false }),
+      sb.from("plan_subscriptions").select("user_id,status,confirmed_at,submitted_at,amount_kz").order("confirmed_at", { ascending: false }),
+      sb.from("instances").select("user_id,status,connection_state,automation_paused").order("updated_at", { ascending: false }),
+      sb.from("user_roles").select("user_id,role"),
+    ]);
+
     const roleMap = new Map((roles || []).map((r: any) => [r.user_id, r.role]));
     const rows = (profiles || []).map((p: Row) => ({
       ...p,
       role: roleMap.get(p.user_id) || "client",
     }));
+
     setUsers(rows.filter((r: Row) => r.role === "client"));
     setSubs(rows.filter((r: Row) => r.role === "sub_admin"));
+    setMetrics(
+      buildAdminDashboardMetrics({
+        profiles: profiles || [],
+        subscriptions: subscriptions || [],
+        instances: instances || [],
+        range: nextRange,
+      }),
+    );
   };
-  
 
   useEffect(() => {
-    load();
-  }, []);
+    void load(range);
+  }, [range]);
   const filtered = users
     .filter((u) =>
       filter === "active"
@@ -266,38 +279,42 @@ export default function AdminDashboard() {
       search={search}
       onSearch={setSearch}
     >
+      <div className="flex flex-col gap-3 rounded-xl border bg-card p-3 shadow-sm md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Painel administrativo</p>
+          <h2 className="text-lg font-semibold">Indicadores reais por período</h2>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-muted-foreground">Período</span>
+          <Select value={range} onValueChange={(value) => setRange(value as RangeKey)}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Período" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="today">Hoje</SelectItem>
+              <SelectItem value="7d">Últimos 7 dias</SelectItem>
+              <SelectItem value="30d">Últimos 30 dias</SelectItem>
+              <SelectItem value="90d">Últimos 90 dias</SelectItem>
+              <SelectItem value="month">Este mês</SelectItem>
+              <SelectItem value="previousMonth">Mês anterior</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <Stat
-          label="Usuários ativos"
-          value={active}
-          icon={<Users />}
-          onClick={() => setFilter("active")}
-        />
-        <Stat
-          label="Suspendidos"
-          value={suspended}
-          icon={<Ban />}
-          onClick={() => setFilter("suspended")}
-        />
-        <Stat
-          label="Sem mensagens"
-          value={empty}
-          icon={<MessageSquarePlus />}
-          onClick={() => setFilter("empty")}
-        />
-        <Stat label="Em teste" value={trial} icon={<Users />} onClick={() => setFilter("trial")} />
-        <Stat label="Aguardando ativação" value={awaitingActivation} icon={<Wallet />} onClick={() => setFilter("awaiting_activation")} />
-        <Stat label="Contas ativas" value={commercialActive} icon={<CheckCircle2 />} onClick={() => setFilter("commercial_active")} />
-        <Stat
-          label="Ganhos totais"
-          value={`${(users.length * 22500).toLocaleString("pt-AO")} Kz`}
-          icon={<Coins />}
-        />
-        <Stat
-          label="Mensagens vendidas"
-          value={users.reduce((s, u) => s + Number(u.message_limit || 0), 0)}
-          icon={<MessageSquarePlus />}
-        />
+        <Stat label="Utilizadores registados" value={metrics.totalUsers} icon={<Users />} onClick={() => setFilter("all")} />
+        <Stat label="Novos registos" value={metrics.newUsers} icon={<UserPlus />} onClick={() => setFilter("all")} />
+        <Stat label="Utilizadores ativos" value={metrics.activeUsers} icon={<CheckCircle2 />} onClick={() => setFilter("active")} />
+        <Stat label="Utilizadores inativos" value={metrics.inactiveUsers} icon={<Ban />} onClick={() => setFilter("suspended")} />
+        <Stat label="Configuração concluída" value={metrics.onboardingCompleted} icon={<Shield />} onClick={() => setFilter("all")} />
+        <Stat label="WhatsApp ligados" value={metrics.connectedWhatsApp} icon={<MessageSquarePlus />} onClick={() => setFilter("all")} />
+        <Stat label="Automação operacional" value={metrics.automationOperational} icon={<RefreshCw />} onClick={() => setFilter("all")} />
+        <Stat label="Em teste gratuito" value={metrics.trialUsers} icon={<Users />} onClick={() => setFilter("trial")} />
+        <Stat label="Clientes pagantes" value={metrics.paidCustomers} icon={<Wallet />} onClick={() => setFilter("all")} />
+        <Stat label="Recompra" value={metrics.repeatBuyers} icon={<Coins />} onClick={() => setFilter("all")} />
+        <Stat label="Créditos esgotados" value={metrics.creditDepleted} icon={<MessageSquarePlus />} onClick={() => setFilter("empty")} />
+        <Stat label="Receita confirmada" value={`${metrics.totalConfirmedRevenue.toLocaleString("pt-AO")} Kz`} icon={<Coins />} onClick={() => setFilter("all")} />
       </div>
       {search.trim() && (
         <Card>
