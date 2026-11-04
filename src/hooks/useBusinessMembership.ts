@@ -3,18 +3,20 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 
 export type MemberRole = "owner" | "attendant" | null;
+export type PermissionScope = "all" | "own";
 export type Membership = { id: string; business_id: string; user_id: string; role: MemberRole; status: string; name: string | null; email: string };
 
 export function useBusinessMembership() {
   const { user, loading: authLoading } = useAuth();
   const [membership, setMembership] = useState<Membership | null>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
+  const [permissionScopes, setPermissionScopes] = useState<Record<string, PermissionScope>>({});
   const [loading, setLoading] = useState(true);
   const [ownerUserId, setOwnerUserId] = useState<string | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
-    if (!user) { setMembership(null); setPermissions([]); setOwnerUserId(null); setLoading(false); return; }
+    if (!user) { setMembership(null); setPermissions([]); setPermissionScopes({}); setOwnerUserId(null); setLoading(false); return; }
     let cancelled = false;
     setLoading(true);
     const load = async () => {
@@ -29,6 +31,7 @@ export function useBusinessMembership() {
         const legacyOwner = (roles || []).some((row) => row.role === "admin");
         setMembership(legacyOwner ? { id: "legacy", business_id: "", user_id: user.id, role: "owner", status: "active", name: user.user_metadata?.full_name || null, email: user.email || "" } : null);
         setPermissions([]);
+        setPermissionScopes({});
         setOwnerUserId(legacyOwner ? user.id : null);
       } else {
         setMembership(data);
@@ -37,7 +40,9 @@ export function useBusinessMembership() {
           const { data: owner } = await (supabase as any).from("business_members").select("user_id").eq("business_id", data.business_id).eq("role", "owner").eq("status", "active").maybeSingle();
           setOwnerUserId(owner?.user_id || null);
         }
-        setPermissions((data.business_member_permissions || []).filter((item: { enabled: boolean }) => item.enabled).map((item: { permission: string }) => item.permission));
+        const enabledPermissions = (data.business_member_permissions || []).filter((item: { enabled: boolean }) => item.enabled);
+        setPermissions(enabledPermissions.map((item: { permission: string }) => item.permission));
+        setPermissionScopes(Object.fromEntries(enabledPermissions.map((item: { permission: string; data_scope?: PermissionScope }) => [item.permission, item.data_scope || "all"])));
       }
       setLoading(false);
     };
@@ -47,5 +52,5 @@ export function useBusinessMembership() {
 
   const isOwner = membership?.role === "owner" && membership.status === "active";
   const hasPermission = (permission: string) => Boolean(isOwner || (membership?.role === "attendant" && membership.status === "active" && permissions.includes(permission)));
-  return { membership, permissions, loading, isOwner, ownerUserId, hasPermission };
+  return { membership, permissions, permissionScopes, loading, isOwner, ownerUserId, hasPermission };
 }

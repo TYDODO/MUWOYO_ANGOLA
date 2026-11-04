@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { getScopedMessageKey, resolveDeliveryStatus, resolveMessageDirection } from "../../../src/lib/message-identity.ts";
+import { extractEvolutionMessageId, getScopedMessageKey, isEvolutionMessageFromMe, resolveDeliveryStatus, resolveMessageDirection } from "../../../src/lib/message-identity.ts";
+import { extractEvolutionMediaBase64 } from "../_shared/evolution-media.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -61,59 +62,87 @@ function detectKind(message: any): { kind: string; text: string } {
   return { kind: "text", text };
 }
 
-async function fetchAudioBase64(instance: string, messageKey: any): Promise<string | null> {
-  if (!EVOLUTION_URL || !EVOLUTION_KEY || !messageKey) return null;
-  try {
-    const r = await fetch(`${EVOLUTION_URL}/chat/getBase64FromMediaMessage/${instance}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", apikey: EVOLUTION_KEY },
-      body: JSON.stringify({ message: { key: messageKey } }),
-    });
-    if (!r.ok) return null;
-    const j = await r.json();
-    return j?.base64 || null;
-  } catch {
+async function fetchMediaBase64(instance: string, messageKey: any, kind: string, message: any): Promise<string | null> {
+  const mediaMessage = message?.[`${kind}Message`];
+  const embeddedBase64 = extractEvolutionMediaBase64(mediaMessage) || extractEvolutionMediaBase64(message);
+  if (embeddedBase64) return embeddedBase64;
+  if (!messageKey) return null;
+  if (!EVOLUTION_URL || !EVOLUTION_KEY) {
+    console.error(JSON.stringify({ event: "webhook_media_fetch_failed", instance, kind, reason: "missing_configuration" }));
     return null;
   }
-}
-
-async function persistMedia(instance: string, messageKey: any, userId: string, kind: string) {
-  if (!EVOLUTION_URL || !EVOLUTION_KEY || !messageKey || !["image", "audio", "video", "document"].includes(kind)) return null;
   try {
-    const response = await fetch(`${EVOLUTION_URL}/chat/getBase64FromMediaMessage/${encodeURIComponent(instance)}`, {
+    const r = await fetch(`${EVOLUTION_URL}/chat/getBase64FromMediaMessage/${encodeURIComponent(instance)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", apikey: EVOLUTION_KEY },
       body: JSON.stringify({ message: { key: messageKey }, convertToMp4: kind === "video" }),
     });
-    if (!response.ok) return null;
-    const payload = await response.json();
-    const base64 = String(payload?.base64 || "").replace(/^data:[^;]+;base64,/, "");
-    if (!base64) return null;
+    if (!r.ok) {
+      console.error(JSON.stringify({ event: "webhook_media_fetch_failed", instance, kind, status: r.status }));
+      return null;
+    }
+    return extractEvolutionMediaBase64(await r.json());
+  } catch {
+    console.error(JSON.stringify({ event: "webhook_media_fetch_failed", instance, kind, reason: "network_or_invalid_response" }));
+    return null;
+  }
+}
+
+async function persistMedia(instance: string, messageKey: any, userId: string, kind: string, message: any) {
+  if (!messageKey || !["image", "audio", "video", "document"].includes(kind)) return null;
+  try {
+    const embedded = extractEvolutionMediaBase64(message?.[`${kind}Message`]) || extractEvolutionMediaBase64(message);
+    let base64 = embedded;
+    if (!base64) {
+      if (!EVOLUTION_URL || !EVOLUTION_KEY) {
+        console.error(JSON.stringify({ event: "webhook_media_persist_failed", instance, kind, reason: "missing_configuration" }));
+        return null;
+      }
+      const response = await fetch(`${EVOLUTION_URL}/chat/getBase64FromMediaMessage/${encodeURIComponent(instance)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: EVOLUTION_KEY },
+        body: JSON.stringify({ message: { key: messageKey }, convertToMp4: kind === "video" }),
+      });
+      if (!response.ok) {
+        console.error(JSON.stringify({ event: "webhook_media_persist_failed", instance, kind, status: response.status }));
+        return null;
+      }
+      base64 = extractEvolutionMediaBase64(await response.json());
+    }
+    if (!base64) {
+      console.error(JSON.stringify({ event: "webhook_media_persist_failed", instance, kind, reason: "empty_media_payload" }));
+      return null;
+    }
     const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
     const extension = kind === "image" ? "jpg" : kind === "audio" ? "ogg" : kind === "video" ? "mp4" : "bin";
-    const path = `${userId}/inbox/${messageKey.id}-${Date.now()}.${extension}`;
+    const path = `${userId}/inbox/${messageKey.id || crypto.randomUUID()}-${Date.now()}.${extension}`;
     const contentType = kind === "image" ? "image/jpeg" : kind === "audio" ? "audio/ogg" : kind === "video" ? "video/mp4" : "application/octet-stream";
     const upload = await admin.storage.from("store-assets").upload(path, bytes, { contentType, upsert: true });
-    if (upload.error) return null;
+    if (upload.error) {
+      console.error(JSON.stringify({ event: "webhook_media_storage_failed", instance, kind, code: upload.error.name }));
+      return null;
+    }
     return admin.storage.from("store-assets").getPublicUrl(path).data.publicUrl;
   } catch {
+    console.error(JSON.stringify({ event: "webhook_media_persist_failed", instance, kind, reason: "invalid_media_or_storage_error" }));
     return null;
   }
 }
 
 async function saveHistory(userId: string, phoneNumber: string, role: "user" | "assistant", content: string, metadata: Record<string, unknown> = {}) {
   if (!content) return;
-  await admin.from("n8n_chat_histories").insert({
+  const { error } = await admin.from("n8n_chat_histories").insert({
     user_id: userId,
     phone_number: phoneNumber,
     session_id: `${userId}_${phoneNumber}`,
     message: { type: role, data: { content, ...metadata } },
   });
+  if (error) throw error;
 }
 
 async function dispatchToN8n(payload: any) {
   if (!N8N_URL) {
-    console.warn("N8N_WEBHOOK_URL not configured");
+    console.error("N8N_WEBHOOK_URL is not configured");
     return false;
   }
   try {
@@ -121,13 +150,20 @@ async function dispatchToN8n(payload: any) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(10000),
     });
+    console.log(JSON.stringify({ event: "n8n_dispatch", host: new URL(N8N_URL).host, status: res.status, ok: res.ok }));
+    await res.body?.cancel();
     return res.ok;
   } catch (e) {
-    console.error("n8n dispatch error", e);
+    console.error("n8n dispatch failed", e instanceof Error ? e.message : "unknown_error");
     return false;
   }
 }
+
+const logMessageSkip = (instanceName: string, messageId: string | null, reason: string) => {
+  console.info(JSON.stringify({ event: "customer_message_skipped", instanceName, messageId, reason }));
+};
 
 async function sendQueuedInboxMessages(instanceName: string) {
   const { data: pendingRows, error } = await admin
@@ -194,7 +230,7 @@ async function sendQueuedInboxMessages(instanceName: string) {
       try { result = responseText ? JSON.parse(responseText) : null; } catch { result = { raw: responseText }; }
 
       if (response.ok) {
-        const externalId = result?.key?.id || result?.data?.key?.id || null;
+        const externalId = extractEvolutionMessageId(result);
         await admin.from("messages").update({
           delivery_status: "sent",
           external_id: externalId,
@@ -230,28 +266,46 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (!isValidWebhookSecret(req)) return new Response("Unauthorized webhook", { status: WEBHOOK_SECRET ? 401 : 503 });
   try {
-    const body = await req.json().catch(() => ({}));
+    let body: any;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(JSON.stringify({ error: "invalid_json" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const event = (body?.event || "").toString().toLowerCase().replace(/[._-]/g, "");
     const instanceName = body?.instance || body?.instanceName || body?.data?.instanceName;
     if (!instanceName) return ok({ ok: true, ignored: true });
+    console.info(JSON.stringify({ event: "evolution_webhook_received", evolutionEvent: event, instanceName }));
 
-    const { data: inst } = await admin
+    const { data: inst, error: instanceError } = await admin
       .from("instances")
-      .select("user_id, phone, automation_paused, automation_paused_until")
+      .select("id,user_id,phone,automation_paused,automation_paused_until")
       .eq("instance_name", instanceName)
       .maybeSingle();
+    if (instanceError) throw instanceError;
     if (!inst) return ok({ ok: true, no_instance: true });
     const userId = inst.user_id as string;
     // Auto-resume if pause timer expired
     if (inst.automation_paused && inst.automation_paused_until && new Date(inst.automation_paused_until).getTime() <= Date.now()) {
-      await admin.from("instances").update({ automation_paused: false, automation_paused_until: null }).eq("instance_name", instanceName);
+      const { error } = await admin.from("instances").update({ automation_paused: false, automation_paused_until: null }).eq("instance_name", instanceName);
+      if (error) throw error;
       inst.automation_paused = false;
     }
 
     if (event === "connectionupdate") {
-      const state = body?.data?.state || body?.state;
+      const state = body?.data?.state || body?.data?.instance?.state || body?.state;
       const mapped = state === "open" ? "connected" : state === "connecting" ? "connecting" : "disconnected";
-      const updates: any = { connection_state: mapped, evolution_state: state, status: mapped };
+      const updates: any = {
+        connection_state: mapped,
+        evolution_state: state,
+        status: mapped,
+        ...(mapped === "connected"
+          ? { disconnected_at: null }
+          : { disconnected_at: new Date().toISOString(), automation_paused: false, automation_paused_until: null }),
+      };
       const wuid = body?.data?.wuid || body?.data?.ownerJid;
       if (wuid) {
         const phoneNum = normalizePhone(wuid);
@@ -259,8 +313,24 @@ Deno.serve(async (req) => {
         updates.phone_number = phoneNum;
       }
       if (mapped === "connected") updates.last_connected_at = new Date().toISOString();
-      await admin.from("instances").update(updates).eq("instance_name", instanceName);
+      const { error } = await admin.from("instances").update(updates).eq("instance_name", instanceName);
+      if (error) throw error;
       if (mapped === "connected") await sendQueuedInboxMessages(instanceName);
+    }
+
+    if (event === "instancedelete" || event === "instancedeleted") {
+      const { error } = await admin.from("instances").update({
+        connection_state: "disconnected",
+        evolution_state: "close",
+        status: "disconnected",
+        disconnected_at: new Date().toISOString(),
+        automation_paused: false,
+        automation_paused_until: null,
+        phone: null,
+        phone_number: null,
+        qr_code: null,
+      }).eq("id", inst.id);
+      if (error) throw error;
     }
 
     if (event === "presenceupdate") {
@@ -346,6 +416,7 @@ Deno.serve(async (req) => {
         last_sync_at: isLatest ? now : null,
       }).eq("instance_name", instanceName);
       console.log(JSON.stringify({ event: "MESSAGES_SET", instanceName, progress, isLatest }));
+      return ok({ ok: true, historyProgress: progress, isLatest });
     }
 
     if (event === "messagesupsert" || event === "messagesset" || event === "sendmessage") {
@@ -357,38 +428,34 @@ Deno.serve(async (req) => {
         const isGroup = isGroupJid(remote);
         if (isGroup) continue;
         const phoneNumber = normalizePhone(remote);
-        const fromMe = m?.key?.fromMe === true || m?.fromMe === true;
+        const fromMe = event === "sendmessage" || isEvolutionMessageFromMe(m);
         const incomingStatus = resolveDeliveryStatus(String(m?.status ?? ""));
         const initialStatus = incomingStatus || (fromMe ? "sent" : "received");
         const pushName = fromMe ? null : m?.pushName || m?.verifiedBizName || null;
         const { kind, text } = detectKind(m?.message);
         if (!isGroup && !isIndividualJid(remote)) continue;
-        const mediaUrl = await persistMedia(instanceName, m?.key, userId, kind);
+        const mediaUrl = await persistMedia(instanceName, m?.key, userId, kind, m?.message);
         const messageDirection = resolveMessageDirection(fromMe);
 
-        const { data: existingContact } = await admin
+        const { data: contact, error: contactError } = await admin
           .from("whatsapp_contacts")
-          .select("id,name")
-          .eq("user_id", userId)
-          .eq("instance_name", instanceName)
-          .eq("phone_number", phoneNumber)
-          .maybeSingle();
-        if (existingContact) {
-          await admin.from("whatsapp_contacts").update({
-            ...(pushName ? { name: pushName } : {}),
-            last_message_at: new Date().toISOString(),
-          }).eq("id", existingContact.id);
-        } else {
-          await admin.from("whatsapp_contacts").insert({
+          .upsert({
             user_id: userId,
             instance_name: instanceName,
+            whatsapp_instance_id: inst.id,
             remote_jid: remote,
+            canonical_remote_jid: remote,
+            identity_type: "phone",
+            identity_status: "resolved",
             is_group: false,
             phone_number: phoneNumber,
-            name: pushName,
+            ...(pushName ? { name: pushName } : {}),
             last_message_at: new Date().toISOString(),
-          });
-        }
+          }, { onConflict: "user_id,instance_name,phone_number" })
+          .select("id,should_respond")
+          .single();
+        if (contactError) throw contactError;
+        if (!contact?.id) throw new Error("contact_upsert_returned_no_id");
 
         // Save inbound message immediately (for history regardless of automation)
         const messagePayload = {
@@ -414,56 +481,85 @@ Deno.serve(async (req) => {
           failed_at: initialStatus === "failed" ? new Date().toISOString() : null,
         };
         const scopedKey = getScopedMessageKey({ userId, whatsappInstanceId: instanceName, externalId: m?.key?.id || null, phoneNumber });
-        const { data: existingMessage } = await admin.from("messages").select("id").eq("user_id", userId).eq("whatsapp_instance_id", instanceName).eq("external_id", m?.key?.id || "").maybeSingle();
+        const { data: existingMessage, error: existingMessageError } = await admin.from("messages").select("id").eq("user_id", userId).eq("whatsapp_instance_id", instanceName).eq("external_id", m?.key?.id || "").maybeSingle();
+        if (existingMessageError) throw existingMessageError;
         let insertedMessage = false;
+        let databaseMessageId = existingMessage?.id || null;
         if (!existingMessage && m?.key?.id) {
-          const { error: insertError } = await admin.from("messages").insert(messagePayload);
-          insertedMessage = !insertError;
+          const { data: insertedRow, error: insertError } = await admin.from("messages").insert(messagePayload).select("id").maybeSingle();
+          insertedMessage = !insertError && Boolean(insertedRow?.id);
+          databaseMessageId = insertedRow?.id || null;
           if (insertError && insertError.code !== "23505") throw insertError;
+          if (insertError?.code === "23505") {
+            const { data: racedRow } = await admin.from("messages").select("id").eq("user_id", userId).eq("whatsapp_instance_id", instanceName).eq("external_id", m.key.id).maybeSingle();
+            databaseMessageId = racedRow?.id || null;
+          }
         }
         if (insertedMessage && event !== "messagesset" && m?.key?.id) {
-          await saveHistory(userId, phoneNumber, fromMe ? "assistant" : "user", text || `[${kind}]`, { kind, media_url: mediaUrl, external_id: m?.key?.id || null, is_group: false, scoped_message_key: scopedKey });
+          await saveHistory(userId, phoneNumber, fromMe ? "assistant" : "user", text || `[${kind}]`, {
+            kind,
+            media_url: mediaUrl,
+            message_id: m?.key?.id || null,
+            external_id: m?.key?.id || null,
+            external_message_id: m?.key?.id || null,
+            database_message_id: databaseMessageId,
+            remote_jid: remote,
+            message_key: { id: m?.key?.id || null, remoteJid: remote, fromMe },
+            is_group: false,
+            scoped_message_key: scopedKey,
+          });
         }
 
         // Messages sent directly from the connected phone belong to the Inbox,
         // but must never trigger another AI response.
         if (!insertedMessage || fromMe || event !== "messagesupsert") continue;
 
-        if (inst.automation_paused === true) continue;
+        if (inst.automation_paused === true) {
+          logMessageSkip(instanceName, m?.key?.id || null, "automation_paused");
+          continue;
+        }
 
-        const { data: blocked } = await admin
+        const { data: blocked, error: blockedError } = await admin
           .from("blocked_contacts")
           .select("id")
           .eq("user_id", userId)
           .eq("phone_number", phoneNumber)
           .eq("is_active", true)
           .maybeSingle();
-        if (blocked) continue;
+        if (blockedError) throw blockedError;
+        if (blocked) {
+          logMessageSkip(instanceName, m?.key?.id || null, "contact_blocked");
+          continue;
+        }
 
-        const { data: contact } = await admin
-          .from("whatsapp_contacts")
-          .select("id,should_respond")
-          .eq("user_id", userId)
-          .eq("phone_number", phoneNumber)
-          .maybeSingle();
-        if (contact?.should_respond === false) continue;
-        const { data: conversation } = await admin
+        if (contact?.should_respond === false) {
+          logMessageSkip(instanceName, m?.key?.id || null, "contact_response_disabled");
+          continue;
+        }
+        const { data: conversation, error: conversationError } = await admin
           .from("inbox_conversations")
           .select("status,response_mode")
           .eq("user_id", userId)
-          .eq("contact_id", contact?.id || "")
+          .eq("instance_name", instanceName)
+          .eq("contact_id", contact.id)
           .maybeSingle();
-        if (conversation?.response_mode === "human" || conversation?.status === "human") continue;
+        if (conversationError) throw conversationError;
+        if (conversation?.response_mode === "human") {
+          logMessageSkip(instanceName, m?.key?.id || null, "human_takeover");
+          continue;
+        }
 
         // Check credits before dispatching to n8n
-        const { data: profile } = await admin
+        const { data: profile, error: profileError } = await admin
           .from("profiles")
-          .select("messages_received, message_limit, business_name, business_description, ai_name, ai_rules")
+          .select("messages_received, message_limit, business_name, business_description, ai_name, ai_rules, business_hours, accepts_appointments, appointment_duration_minutes")
           .eq("user_id", userId)
           .maybeSingle();
+        if (profileError) throw profileError;
         const limit = Number(profile?.message_limit || 0);
         const used = Number(profile?.messages_received || 0);
         if (limit - used <= 0) {
+          logMessageSkip(instanceName, m?.key?.id || null, "credits_exhausted");
           await admin.from("instances").update({ automation_paused: true }).eq("instance_name", instanceName);
           await admin.from("notifications").insert({
             user_id: userId,
@@ -476,13 +572,12 @@ Deno.serve(async (req) => {
         }
 
         // Build n8n payload
-        const audioBase64 = kind === "audio" ? await fetchAudioBase64(instanceName, m?.key) : null;
-
         const systemPrompt = [
           profile?.business_name ? `Empresa: ${profile.business_name}` : "",
           profile?.business_description ? `Sobre: ${profile.business_description}` : "",
           profile?.ai_name ? `Você é ${profile.ai_name}, atendente virtual.` : "",
           profile?.ai_rules ? `Regras:\n${profile.ai_rules}` : "",
+          "Provas sociais: consulte match_social_proofs com o contexto e o produto exato identificados na conversa. Nunca apresente um testemunho de produto como avaliação de outro produto, nem um testemunho de produto como avaliação de um serviço. Use apenas resultados ativos e relevantes; testemunhos de serviço são evidências gerais da empresa ou dos serviços prestados.",
         ].filter(Boolean).join("\n\n");
 
         const payload = {
@@ -493,44 +588,103 @@ Deno.serve(async (req) => {
             customer_phone: phoneNumber,
             message_type: kind,
             message_id: m?.key?.id,
+            database_message_id: databaseMessageId,
+            external_message_id: m?.key?.id,
+            whatsapp_message_id: m?.key?.id,
+            message_key: {
+              id: m?.key?.id,
+              remoteJid: remote,
+              fromMe,
+            },
             user_id: userId,
             callback_url: `${SUPABASE_URL}/functions/v1/n8n-callback`,
             callback_secret: Deno.env.get("N8N_CALLBACK_SECRET") || "",
+            social_proof_retrieval: {
+              rpc: "match_social_proofs",
+              user_id: userId,
+              argument_contract: {
+                _user_id: "metadata.user_id",
+                _query: "customer_message_and_relevant_conversation_context",
+                _context: { allowed_values: ["product", "service", "company"] },
+                _product_id: "exact_catalog_product_id_or_null",
+                _limit: 5,
+              },
+              product_lookup: "Resolve an explicitly mentioned catalog product to its exact ID; do not infer a different product.",
+              filters: ["user_id", "is_active", "proof_type", "exact_product_id_when_context_is_product"],
+              result_fields: ["proof_type", "product_id", "title", "description", "media_url", "relevance"],
+              rules: [
+                "For a product conversation, retrieve exact-product proofs first; service proofs may be used only as general company/service evidence.",
+                "Never use a product proof for a different product or describe it as an evaluation of another product.",
+                "For a service conversation, retrieve only relevant service proofs.",
+                "For general company trust, use relevant service proofs; do not present product proofs as service or company testimonials.",
+                "Do not invent or imply customer experiences beyond the retrieved testimony.",
+              ],
+            },
           },
           message_data: {
             content: text,
             media_url: mediaUrl,
-            media_base64: audioBase64,
+            media_base64: null,
+            media_kind: kind,
+            media_mimetype: messagePayload.mime_type,
           },
           business_logic: {
             system_prompt: systemPrompt,
             messages_remaining: limit - used,
+            business_hours: profile?.business_hours || null,
+            accepts_appointments: profile?.accepts_appointments ?? true,
+            appointment_duration_minutes: profile?.appointment_duration_minutes ?? 30,
           },
         };
 
-        // Enqueue (for safety) and fire-and-forget to n8n
-        const { data: queued } = await admin
+        // Persist first; dispatch in the background so Evolution is not blocked by n8n.
+        const { data: queued, error: queueError } = await admin
           .from("message_queue")
           .insert({
             user_id: userId,
             instance_name: instanceName,
             remote_jid: remote,
             payload,
-            status: "processing",
+            status: "pending",
           })
           .select("id")
           .single();
-
-        const sent = await dispatchToN8n({ ...payload, metadata: { ...payload.metadata, queue_id: queued?.id } });
-        if (!sent && queued?.id) {
-          await admin.from("message_queue").update({ status: "pending", last_error: "dispatch_failed" }).eq("id", queued.id);
+        if (queueError || !queued?.id) {
+          console.error(JSON.stringify({ event: "customer_message_queue_failed", instanceName, databaseMessageId, error: queueError?.message || "queue_id_missing" }));
+          continue;
         }
+
+        const queuedPayload = {
+          ...payload,
+          metadata: { ...payload.metadata, queue_id: queued.id },
+        };
+        EdgeRuntime.waitUntil((async () => {
+          await admin.from("message_queue").update({ status: "processing", payload: queuedPayload }).eq("id", queued.id);
+          if (["image", "audio", "video", "document"].includes(kind)) {
+            const mediaBase64 = await fetchMediaBase64(instanceName, m?.key, kind, m?.message);
+            if (mediaBase64) {
+              queuedPayload.message_data.media_base64 = mediaBase64;
+              await admin.from("message_queue").update({ payload: queuedPayload }).eq("id", queued.id);
+            }
+          }
+          const sent = await dispatchToN8n(queuedPayload);
+          console.log(JSON.stringify({ event: "customer_message_dispatch", instanceName, databaseMessageId, externalMessageId: m?.key?.id || null, queueId: queued.id, kind, delivered: sent }));
+          if (!sent) {
+            await admin.from("message_queue").update({ status: "pending", last_error: "dispatch_failed" }).eq("id", queued.id);
+          }
+        })());
       }
     }
 
     return ok({ ok: true });
-  } catch (e: any) {
-    console.error("webhook error", e);
-    return ok({ error: e?.message || "internal" });
+  } catch (error) {
+    console.error(JSON.stringify({
+      event: "webhook_processing_failed",
+      error: error instanceof Error ? error.message.slice(0, 1000) : "unknown_error",
+    }));
+    return new Response(JSON.stringify({ error: "webhook_processing_failed" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });

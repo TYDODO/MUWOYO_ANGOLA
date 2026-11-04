@@ -50,12 +50,12 @@ Deno.serve(async (req) => {
     if (!userId || !instanceName || !phoneNumber) return json({ error: "missing_fields" }, 400);
 
     if (body.external_message_id) {
-      const { data: duplicate } = await admin.from("messages").select("id").eq("external_id", body.external_message_id).eq("direction", "outbound").maybeSingle();
+      const { data: duplicate } = await admin.from("messages").select("id").eq("user_id", userId).eq("whatsapp_instance_id", instanceName).eq("external_id", body.external_message_id).eq("direction", "outbound").maybeSingle();
       if (duplicate) return json({ ok: true, duplicate: true });
     }
 
     // Save outbound message(s)
-    await admin.from("messages").insert({
+    const { data: savedMessage, error: saveMessageError } = await admin.from("messages").insert({
       user_id: userId,
       phone_number: phoneNumber,
       message_text: sentText.substring(0, 4000),
@@ -64,12 +64,25 @@ Deno.serve(async (req) => {
       whatsapp_instance_id: instanceName,
       external_id: body.external_message_id || null,
       ai_responded: true,
-    });
+    }).select("id").single();
+    if (saveMessageError) return json({ error: "message_save_failed", details: saveMessageError.message }, 500);
     await admin.from("n8n_chat_histories").insert({
       user_id: userId,
       phone_number: phoneNumber,
       session_id: `${userId}_${phoneNumber}`,
-      message: { type: "assistant", data: { content: sentText, external_id: body.external_message_id || null } },
+      message: { type: "assistant", data: {
+        content: sentText,
+        message_id: body.external_message_id || null,
+        external_id: body.external_message_id || null,
+        external_message_id: body.external_message_id || null,
+        database_message_id: savedMessage.id,
+        remote_jid: remoteJid || `${phoneNumber}@s.whatsapp.net`,
+        message_key: {
+          id: body.external_message_id || null,
+          remoteJid: remoteJid || `${phoneNumber}@s.whatsapp.net`,
+          fromMe: true,
+        },
+      } },
     });
 
     const aiModelId = body.model_id as string | undefined;

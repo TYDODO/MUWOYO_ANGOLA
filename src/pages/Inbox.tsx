@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import DashboardShell from "@/components/DashboardShell";
 import AudioMessagePlayer from "@/components/inbox/AudioMessagePlayer";
 import { normalizeWhatsAppPhone } from "@/lib/message-identity";
@@ -26,6 +26,7 @@ import {
   FileText,
   MoreVertical,
   Smile,
+  Tag as TagIcon,
   UserRound,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -33,7 +34,14 @@ import { usePlanEntitlements } from "@/hooks/usePlanEntitlements";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useBusinessMembership } from "@/hooks/useBusinessMembership";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import DateTimeSelect from "@/components/DateTimeSelect";
 
 const db = supabase as any;
@@ -56,10 +64,23 @@ type Conversation = {
     phone_number: string;
     profile_picture_url?: string | null;
     is_group?: boolean;
+    stage?: InboxCategory | null;
+    tags?: InboxCategory[];
   };
 };
 type InboxAttendant = { user_id: string; name: string | null; email: string };
-type InboxSyncResponse = { cached?: boolean; historyPending?: number };
+type InboxSyncResponse = { cached?: boolean; historyPending?: number; webhookConfigured?: boolean };
+type InboxCategory = { id: string; name: string; color: string };
+const DEFAULT_INBOX_TAG_COLOR = "#0f766e";
+
+function isMissingColorColumn(error: { code?: string; message?: string } | null) {
+  return Boolean(error && (
+    error.code === "42703"
+    || error.code === "PGRST204"
+    || /could not find .*color|column .*color.* does not exist|schema cache.*color/i.test(error.message || "")
+  ));
+}
+
 type Message = {
   id: string;
   direction: string;
@@ -74,6 +95,7 @@ type Message = {
   mime_type?: string | null;
   delivery_status?: string | null;
   read_at?: string | null;
+  from_me?: boolean;
   external_id?: string | null;
   is_voice_note?: boolean;
   is_historical?: boolean;
@@ -86,12 +108,22 @@ function getContactInitials(name?: string | null, phone?: string | null) {
   return (phone || "?").slice(-2).toUpperCase();
 }
 
+function getCategoryTextColor(color: string) {
+  const hex = color.replace("#", "");
+  if (!/^[\da-f]{6}$/i.test(hex)) return "#ffffff";
+  const [red, green, blue] = [0, 2, 4]
+    .map((index) => parseInt(hex.slice(index, index + 2), 16) / 255)
+    .map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue > 0.179 ? "#17211d" : "#ffffff";
+}
+
 export default function Inbox() {
   const { user } = useAuth();
   const { membership, ownerUserId, isOwner, hasPermission } = useBusinessMembership();
   const { entitlements, planName, loading } = usePlanEntitlements();
   const { toast } = useToast();
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [inboxTags, setInboxTags] = useState<InboxCategory[]>([]);
     const [attendants, setAttendants] = useState<InboxAttendant[]>([]);
   const [instances, setInstances] = useState<{ instance_name: string; phone: string | null; connection_state: string | null }[]>([]);
   const [activeInstance, setActiveInstance] = useState("");
@@ -114,9 +146,13 @@ export default function Inbox() {
     item: "",
     scheduled_at: "",
     notes: "",
+    customer_name: "",
+    customer_phone: "",
     location: "",
     price: "",
     quantity: "1",
+    delivery_fee: "0",
+    discount: "0",
   });
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaCaption, setMediaCaption] = useState("");
@@ -125,6 +161,10 @@ export default function Inbox() {
   const [mediaRetryMap, setMediaRetryMap] = useState<Record<string, number>>({});
   const [mediaStateMap, setMediaStateMap] = useState<Record<string, { loading: boolean; error: boolean }>>({});
   const [profileOpen, setProfileOpen] = useState(false);
+  const [previewMedia, setPreviewMedia] = useState<{ url: string; alt: string } | null>(null);
+  const [tagManagerOpen, setTagManagerOpen] = useState(false);
+  const [newTag, setNewTag] = useState({ name: "", color: "#0f766e" });
+  const [savingTag, setSavingTag] = useState(false);
   const [newConversationOpen, setNewConversationOpen] = useState(false);
   const [newConversationForm, setNewConversationForm] = useState({ name: "", countryCode: "+244", phone: "" });
   const [contactNameDraft, setContactNameDraft] = useState("");
@@ -142,7 +182,11 @@ export default function Inbox() {
   const messageLoadSequenceRef = useRef(0);
   const selectedRef = useRef<Conversation | null>(null);
   const syncPromiseRef = useRef<Promise<void> | null>(null);
+  const profileSyncPromiseRef = useRef<Promise<void> | null>(null);
   const markedReadMessageIdsRef = useRef(new Set<string>());
+  const readReconciledConversationsRef = useRef(new Set<string>());
+  const readRequestsInFlightRef = useRef(new Set<string>());
+  const pendingInitialScrollConversationRef = useRef<string | null>(null);
   const scrollAfterLoadRef = useRef(false);
 
   const load = async () => {
@@ -151,7 +195,12 @@ export default function Inbox() {
     const nextInstances = instanceRows || [];
     setInstances(nextInstances);
     const instanceName = activeInstance || nextInstances[0]?.instance_name;
-    if (!instanceName) return;
+    if (!instanceName) {
+      setConversations([]);
+      setInboxTags([]);
+      setSelected(null);
+      return;
+    }
     if (!activeInstance) setActiveInstance(instanceName);
     let conversationsQuery = db
       .from("inbox_conversations")
@@ -160,14 +209,43 @@ export default function Inbox() {
       .eq("instance_name", instanceName)
       .order("last_message_at", { ascending: false, nullsFirst: false });
     if (membership?.role === "attendant") conversationsQuery = conversationsQuery.eq("assigned_to", user.id);
-    const [{ data: rows }, { data: contacts }] = await Promise.all([
+    const [{ data: rows }, { data: contacts }, { data: metadataRows }, stageResult, tagResult, { data: tagLinks }] = await Promise.all([
       conversationsQuery,
       db
         .from("whatsapp_contacts")
         .select("id,name,custom_name,phone_number,profile_picture_url,is_group")
         .eq("user_id", ownerUserId)
         .eq("instance_name", instanceName),
+      db.from("crm_contact_metadata").select("contact_id,stage_id").eq("user_id", ownerUserId),
+      db.from("crm_stages").select("id,name,color").eq("user_id", ownerUserId),
+      db.from("crm_tags").select("id,name,color").eq("user_id", ownerUserId),
+      db.from("crm_contact_tags").select("contact_id,tag_id").eq("user_id", ownerUserId),
     ]);
+    const [{ data: stageFallback }, { data: tagFallback }] = await Promise.all([
+      stageResult.error && isMissingColorColumn(stageResult.error)
+        ? db.from("crm_stages").select("id,name").eq("user_id", ownerUserId)
+        : Promise.resolve({ data: null }),
+      tagResult.error && isMissingColorColumn(tagResult.error)
+        ? db.from("crm_tags").select("id,name").eq("user_id", ownerUserId)
+        : Promise.resolve({ data: null }),
+    ]);
+    const stageRows = (stageResult.data || stageFallback || []).map((stage: Partial<InboxCategory>) => ({ ...stage, color: stage.color || "#64748b" }));
+    const tagRows = (tagResult.data || tagFallback || []).map((tag: Partial<InboxCategory>) => ({ ...tag, color: tag.color || DEFAULT_INBOX_TAG_COLOR }));
+    const stageMap = new Map<string, InboxCategory>(
+      (stageRows || []).map((stage: InboxCategory) => [stage.id, stage]),
+    );
+    const tagMap = new Map<string, InboxCategory>(
+      (tagRows || []).map((tag: InboxCategory) => [tag.id, tag]),
+    );
+    const metadataMap = new Map<string, { stage_id: string | null }>(
+      (metadataRows || []).map((metadata: { contact_id: string; stage_id: string | null }) => [metadata.contact_id, metadata]),
+    );
+    const tagsByContact = new Map<string, InboxCategory[]>();
+    (tagLinks || []).forEach((link: { contact_id: string; tag_id: string }) => {
+      const tag = tagMap.get(link.tag_id);
+      if (tag) tagsByContact.set(link.contact_id, [...(tagsByContact.get(link.contact_id) || []), tag]);
+    });
+    setInboxTags(tagRows || []);
     const contactMap = new Map<string, {
       id: string;
       name: string | null;
@@ -192,15 +270,67 @@ export default function Inbox() {
         })
         .map((row: Conversation) => {
           const contact = contactMap.get(row.contact_id);
+          const metadata = metadataMap.get(row.contact_id);
           return {
             ...row,
-            contact: contact ? { ...contact, name: contact.custom_name || contact.name } : undefined,
+            unread_count: readReconciledConversationsRef.current.has(row.id) ? 0 : row.unread_count,
+            contact: contact ? {
+              ...contact,
+              name: contact.custom_name || contact.name,
+              stage: metadata?.stage_id ? stageMap.get(metadata.stage_id) || null : null,
+              tags: tagsByContact.get(row.contact_id) || [],
+            } : undefined,
           };
         });
     setConversations(mappedConversations);
     setSelected((current) => current
       ? mappedConversations.find((conversation: Conversation) => conversation.id === current.id) || current
       : current);
+  };
+
+  const syncContactProfiles = async () => {
+    if (!user || !ownerUserId) return;
+    if (profileSyncPromiseRef.current) return profileSyncPromiseRef.current;
+
+    const syncTask = (async () => {
+      let cursor: string | undefined;
+      let failedProfiles = 0;
+      while (true) {
+        const { data, error } = await supabase.functions.invoke("whatsapp-contact-profiles", {
+          body: { instanceName: activeInstance || undefined, cursor, pageSize: 30 },
+        });
+        if (error || data?.error) {
+          toast({
+            title: "Não foi possível atualizar nomes e fotos dos contactos",
+            description: error?.message || data?.message || data?.details || data?.error || "Tente sincronizar novamente.",
+            variant: "destructive",
+          });
+          return;
+        }
+        failedProfiles += Number(data?.failed) || 0;
+        if (!data?.hasMore) break;
+        if (typeof data?.nextCursor !== "string" || data.nextCursor === cursor) {
+          toast({
+            title: "Sincronização de perfis incompleta",
+            description: "A paginação não avançou. Tente sincronizar novamente.",
+            variant: "destructive",
+          });
+          return;
+        }
+        cursor = data.nextCursor;
+      }
+      if (failedProfiles > 0) {
+        toast({
+          title: "Perfis parcialmente atualizados",
+          description: `${failedProfiles} contacto(s) não puderam ser atualizados. Tente sincronizar novamente.`,
+          variant: "destructive",
+        });
+      }
+    })().finally(() => {
+      profileSyncPromiseRef.current = null;
+    });
+    profileSyncPromiseRef.current = syncTask;
+    return syncTask;
   };
 
   useEffect(() => {
@@ -234,7 +364,7 @@ export default function Inbox() {
           if (error || data?.error) {
             if (!silent) toast({
                 title: "Sincronização parcial",
-                description: "As conversas guardadas continuam disponíveis. A sincronização WhatsApp será repetida quando a ligação voltar.",
+                description: typeof data?.error === "string" ? data.error : "As conversas guardadas continuam disponíveis. A sincronização WhatsApp será repetida quando a ligação voltar.",
                 variant: "destructive",
               });
             break;
@@ -242,10 +372,13 @@ export default function Inbox() {
           lastSync = data;
           if (data?.cached || !data?.historyPending) break;
         }
+        if (lastSync && !lastSync.cached) await syncContactProfiles();
         if (!silent && lastSync?.cached) {
           toast({ title: "WhatsApp indisponível", description: "A mostrar as conversas já sincronizadas. A sincronização será repetida quando o telefone voltar a estar online." });
         } else if (!silent && lastSync?.historyPending > 0) {
           toast({ title: "Conversas sincronizadas", description: `Ainda há ${lastSync.historyPending} históricos para importar. Use Sincronizar novamente para continuar.` });
+        } else if (!silent && lastSync?.webhookConfigured === false) {
+          toast({ title: "Webhook WhatsApp não configurado", description: "A sincronização das conversas foi concluída, mas a Evolution não confirmou o webhook. As mensagens novas podem não chegar até a configuração ser corrigida.", variant: "destructive" });
         }
       } catch (error) {
         if (!silent) toast({ title: "Sincronização parcial", description: error instanceof Error ? error.message : "As conversas locais continuam disponíveis; tente sincronizar novamente quando a ligação voltar.", variant: "destructive" });
@@ -358,13 +491,68 @@ export default function Inbox() {
     return () => window.clearInterval(timer);
   }, [selected?.id]);
 
+  const markMessagesRead = useCallback(async (conversationId = selectedRef.current?.id) => {
+    if (!conversationId || readRequestsInFlightRef.current.has(conversationId)) return;
+    readRequestsInFlightRef.current.add(conversationId);
+    try {
+      const { data, error } = await supabase.functions.invoke("mark-conversation-read", {
+        body: { conversationId },
+      });
+      if (error || !data?.ok) {
+        toast({
+          title: "Não foi possível marcar a conversa como lida",
+          description: error?.message || data?.details || data?.error || "Tente novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const readIds = new Set<string>(
+        (Array.isArray(data.markedMessageIds) ? data.markedMessageIds : [])
+          .filter((id: unknown): id is string => typeof id === "string"),
+      );
+      if (data.unreadCountReconciled === false) {
+        toast({
+          title: "Mensagens lidas; contador a sincronizar",
+          description: "As mensagens foram marcadas como lidas, mas o contador antigo não foi atualizado. Sincronize novamente.",
+          variant: "destructive",
+        });
+      }
+      readIds.forEach((id) => markedReadMessageIdsRef.current.add(id));
+      setMessages((current) => current.map((message) =>
+        readIds.has(message.id)
+          ? { ...message, delivery_status: "read", read_at: message.read_at || new Date().toISOString() }
+          : message,
+      ));
+      if (data.unreadCountReconciled !== false) {
+        readReconciledConversationsRef.current.add(conversationId);
+      }
+      setConversations((current) => current.map((conversation) =>
+        conversation.id === conversationId
+          ? { ...conversation, unread_count: 0 }
+          : conversation,
+      ));
+      setSelected((current) => current?.id === conversationId
+        ? { ...current, unread_count: 0 }
+        : current);
+    } catch (error) {
+      toast({
+        title: "Não foi possível marcar a conversa como lida",
+        description: error instanceof Error ? error.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      readRequestsInFlightRef.current.delete(conversationId);
+    }
+  }, [toast]);
+
   const loadMessages = async (conversation: Conversation) => {
     if (!user || !ownerUserId) return;
     const requestSequence = ++messageLoadSequenceRef.current;
     const { data, error } = await db
       .from("messages")
       .select(
-        "id,direction,message_text,ai_responded,created_at,kind,media_url,media_metadata,delivery_status,read_at,external_id,is_voice_note,file_name,file_size_bytes,mime_type,is_historical",
+        "id,direction,message_text,ai_responded,created_at,kind,media_url,media_metadata,delivery_status,read_at,from_me,external_id,is_voice_note,file_name,file_size_bytes,mime_type,is_historical",
       )
       .eq("user_id", ownerUserId)
       .eq("whatsapp_instance_id", conversation.instance_name || activeInstance)
@@ -376,12 +564,34 @@ export default function Inbox() {
       return;
     }
     if (requestSequence !== messageLoadSequenceRef.current || selectedRef.current?.id !== conversation.id) return;
-    setMessages((data || []).reverse());
+    const loadedMessages = (data || []).reverse() as Message[];
+    if (pendingInitialScrollConversationRef.current === conversation.id) {
+      pendingInitialScrollConversationRef.current = null;
+      scrollAfterLoadRef.current = loadedMessages.length > 0;
+    }
+    setMessages(loadedMessages);
+    const unreadMessageIds = loadedMessages
+      .filter((message) =>
+        message.direction === "inbound"
+        && !message.from_me
+        && !message.is_historical
+        && message.delivery_status !== "read"
+        && !message.read_at,
+      )
+      .map((message) => message.id);
+    if (
+      !readReconciledConversationsRef.current.has(conversation.id)
+      || unreadMessageIds.some((id) => !markedReadMessageIdsRef.current.has(id))
+    ) {
+      void markMessagesRead(conversation.id);
+    }
   };
 
   const selectConversation = (conversation: Conversation) => {
     markedReadMessageIdsRef.current.clear();
-    scrollAfterLoadRef.current = true;
+    readReconciledConversationsRef.current.delete(conversation.id);
+    pendingInitialScrollConversationRef.current = conversation.id;
+    scrollAfterLoadRef.current = false;
     selectedRef.current = conversation;
     setSelected(conversation);
     setMessages([]);
@@ -392,47 +602,14 @@ export default function Inbox() {
     selectedRef.current = selected;
   }, [selected]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!scrollAfterLoadRef.current) return;
     scrollAfterLoadRef.current = false;
     const root = messageScrollRef.current;
-    if (root) root.scrollTop = root.scrollHeight;
+    if (root) root.scrollTo({ top: root.scrollHeight, behavior: "instant" });
     else messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
     setAtLatest(true);
   }, [messages]);
-
-  useEffect(() => {
-    const root = document.querySelector<HTMLElement>(".inbox-message-scroll");
-    if (!root || !selected) return;
-
-    const observer = new IntersectionObserver((entries) => {
-      const visibleMessageIds = entries
-        .filter((entry) => entry.isIntersecting && entry.intersectionRatio >= 0.65)
-        .map((entry) => (entry.target as HTMLElement).dataset.messageId)
-        .filter((id): id is string => Boolean(id) && !markedReadMessageIdsRef.current.has(id));
-      if (!visibleMessageIds.length) return;
-
-      visibleMessageIds.forEach((id) => markedReadMessageIdsRef.current.add(id));
-      void supabase.functions.invoke("mark-conversation-read", {
-        body: { messageIds: visibleMessageIds },
-      }).then(({ error }) => {
-        if (error) {
-          visibleMessageIds.forEach((id) => markedReadMessageIdsRef.current.delete(id));
-          return;
-        }
-        const readIds = new Set(visibleMessageIds);
-        setMessages((current) => current.map((message) =>
-          readIds.has(message.id)
-            ? { ...message, delivery_status: "read" }
-            : message,
-        ));
-      });
-    }, { root, threshold: [0.65] });
-
-    root.querySelectorAll<HTMLElement>("[data-message-direction='inbound'][data-message-id]")
-      .forEach((element) => observer.observe(element));
-    return () => observer.disconnect();
-  }, [messages, selected?.id]);
 
   useEffect(() => {
     setContactNameDraft(
@@ -530,11 +707,115 @@ export default function Inbox() {
                     ? conversation.status === "human"
                     : filter === "resolved"
                       ? conversation.status === "closed"
-                      : true;
+                      : filter.startsWith("tag:")
+                        ? conversation.contact?.tags?.some((tag) => tag.id === filter.slice(4)) || false
+                        : true;
         return matchesSearch && matchesFilter;
       }),
     [conversations, filter, search, user],
   );
+
+  const createInboxTag = async () => {
+    if (!user || !newTag.name.trim()) return;
+    setSavingTag(true);
+    const payload = {
+      user_id: ownerUserId || user.id,
+      name: newTag.name.trim(),
+      color: newTag.color,
+    };
+    let result = await db.from("crm_tags").insert(payload);
+    const missingColor = isMissingColorColumn(result.error);
+    if (missingColor) {
+      const { color: _color, ...legacyPayload } = payload;
+      result = await db.from("crm_tags").insert(legacyPayload);
+    }
+    setSavingTag(false);
+    if (result.error) {
+      toast({ title: "Não foi possível criar a etiqueta", description: result.error.message, variant: "destructive" });
+      return;
+    }
+    setNewTag({ name: "", color: "#0f766e" });
+    await load();
+    toast({
+      title: "Etiqueta adicionada ao segmentador",
+      ...(missingColor ? { description: "A etiqueta foi criada. Para guardar cores personalizadas, aplique a migration de cores do CRM no Supabase." } : {}),
+    });
+  };
+
+  const updateInboxTag = async (tag: InboxCategory, patch: { name?: string; color?: string }) => {
+    if (!ownerUserId) return;
+    const { error } = await db.from("crm_tags").update(patch).eq("id", tag.id).eq("user_id", ownerUserId);
+    if (error) {
+      toast({
+        title: "Não foi possível atualizar a etiqueta",
+        description: isMissingColorColumn(error) ? "Aplique a migration crm_category_colors no Supabase para guardar cores." : error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+    setInboxTags((current) => current.map((item) => item.id === tag.id ? { ...item, ...patch } : item));
+    setConversations((current) => current.map((conversation) => ({
+      ...conversation,
+      contact: conversation.contact ? {
+        ...conversation.contact,
+        tags: conversation.contact.tags?.map((item) => item.id === tag.id ? { ...item, ...patch } : item),
+      } : undefined,
+    })));
+    setSelected((current) => current ? {
+      ...current,
+      contact: current.contact ? {
+        ...current.contact,
+        tags: current.contact.tags?.map((item) => item.id === tag.id ? { ...item, ...patch } : item),
+      } : undefined,
+    } : current);
+    toast({ title: "Etiqueta atualizada" });
+  };
+
+  const deleteInboxTag = async (tag: InboxCategory) => {
+    if (!ownerUserId || !window.confirm(`Eliminar a etiqueta "${tag.name}"?`)) return;
+    const { error } = await db.from("crm_tags").delete().eq("id", tag.id).eq("user_id", ownerUserId);
+    if (error) {
+      toast({ title: "Não foi possível eliminar a etiqueta", description: error.message, variant: "destructive" });
+      return;
+    }
+    if (filter === `tag:${tag.id}`) setFilter("all");
+    setInboxTags((current) => current.filter((item) => item.id !== tag.id));
+    setConversations((current) => current.map((conversation) => ({
+      ...conversation,
+      contact: conversation.contact
+        ? { ...conversation.contact, tags: conversation.contact.tags?.filter((item) => item.id !== tag.id) }
+        : undefined,
+    })));
+    setSelected((current) => current ? {
+      ...current,
+      contact: current.contact
+        ? { ...current.contact, tags: current.contact.tags?.filter((item) => item.id !== tag.id) }
+        : undefined,
+    } : current);
+    toast({ title: "Etiqueta eliminada" });
+  };
+
+  const toggleConversationTag = async (tag: InboxCategory) => {
+    if (!selected || !ownerUserId) return;
+    const hasTag = selected.contact?.tags?.some((item) => item.id === tag.id) || false;
+    const result = hasTag
+      ? await db.from("crm_contact_tags").delete().eq("user_id", ownerUserId).eq("contact_id", selected.contact_id).eq("tag_id", tag.id)
+      : await db.from("crm_contact_tags").insert({ user_id: ownerUserId, contact_id: selected.contact_id, tag_id: tag.id });
+    if (result.error) {
+      toast({ title: "Não foi possível atualizar a etiqueta", description: result.error.message, variant: "destructive" });
+      return;
+    }
+    const tags = hasTag
+      ? selected.contact?.tags?.filter((item) => item.id !== tag.id) || []
+      : [...(selected.contact?.tags || []), tag];
+    setSelected((current) => current ? {
+      ...current,
+      contact: current.contact ? { ...current.contact, tags } : undefined,
+    } : current);
+    setConversations((current) => current.map((conversation) => conversation.id === selected.id
+      ? { ...conversation, contact: conversation.contact ? { ...conversation.contact, tags } : undefined }
+      : conversation));
+  };
 
   const assignConversation = async (assigneeId: string | null) => {
     if (!selected || !user || !ownerUserId) return;
@@ -562,10 +843,11 @@ export default function Inbox() {
 
   const toggleAi = async () => {
     if (!selected || !user || !ownerUserId) return;
-    const nextMode = selected.response_mode === "human" ? "ai" : "human";
+    const isHuman = selected.response_mode === "human" || selected.status === "human";
+    const nextMode = isHuman ? "ai" : "human";
     const { error } = await db
       .from("inbox_conversations")
-      .update({ response_mode: nextMode })
+      .update({ response_mode: nextMode, status: nextMode === "ai" ? "open" : "human" })
       .eq("id", selected.id)
       .eq("user_id", ownerUserId);
     if (error)
@@ -577,6 +859,7 @@ export default function Inbox() {
     setSelected({
       ...selected,
       response_mode: nextMode,
+      status: nextMode === "ai" ? "open" : "human",
     });
     await load();
   };
@@ -595,14 +878,41 @@ export default function Inbox() {
   const createQuickAction = async () => {
     if (!selected?.contact || !user || !quickAction) return;
     if (quickAction === "appointment" && !quickForm.scheduled_at) return;
+    const quantity = Number(quickForm.quantity);
+    const price = Number(quickForm.price);
+    const deliveryFee = Number(quickForm.delivery_fee);
+    const discount = Number(quickForm.discount);
+    if (quickAction === "order" && (
+      !quickForm.customer_name.trim()
+      || !quickForm.item.trim()
+      || !Number.isFinite(quantity) || quantity < 1
+      || !quickForm.price.trim() || !Number.isFinite(price) || price < 0
+      || !Number.isFinite(deliveryFee) || deliveryFee < 0
+      || !Number.isFinite(discount) || discount < 0
+    )) {
+      return toast({
+        title: "Dados do pedido inválidos",
+        description: "Preencha cliente e produto, e informe valores válidos iguais ou superiores a zero.",
+        variant: "destructive",
+      });
+    }
+    const subtotal = price * quantity;
+    const total = subtotal + deliveryFee - discount;
+    if (quickAction === "order" && total < 0) {
+      return toast({
+        title: "Desconto inválido",
+        description: "O desconto não pode ser superior ao subtotal mais a entrega.",
+        variant: "destructive",
+      });
+    }
     const result =
       quickAction === "appointment"
         ? await db
             .from("appointments")
             .insert({
               user_id: ownerUserId,
-              customer_name: selected.contact.name,
-              customer_phone: selected.contact.phone_number,
+              customer_name: quickForm.customer_name.trim() || selected.contact.name,
+              customer_phone: quickForm.customer_phone.trim() || selected.contact.phone_number,
               service: quickForm.service || "Atendimento",
               description: quickForm.notes || null,
               notes: quickForm.notes || null,
@@ -615,16 +925,20 @@ export default function Inbox() {
             .from("store_orders")
             .insert({
               user_id: ownerUserId,
-              customer_name: selected.contact.name,
-              customer_phone: selected.contact.phone_number,
+              customer_name: quickForm.customer_name.trim(),
+              customer_phone: quickForm.customer_phone.replace(/\D/g, "") || selected.contact.phone_number,
               customer_location: quickForm.location || null,
               items: [
-                { name: quickForm.item || "Pedido criado no Inbox", qty: Math.max(1, Number(quickForm.quantity) || 1), unit_price: Number(quickForm.price) || 0 },
+                { name: quickForm.item.trim(), qty: quantity, price },
               ],
-              total: (Number(quickForm.price) || 0) * Math.max(1, Number(quickForm.quantity) || 1),
+              subtotal,
+              delivery_fee: deliveryFee,
+              discount,
+              total,
               delivery_address: quickForm.location || null,
               notes: quickForm.notes || null,
               status: "new",
+              delivery_status: "awaiting_pickup",
             });
     if (result.error)
       return toast({
@@ -633,7 +947,19 @@ export default function Inbox() {
         variant: "destructive",
       });
     setQuickAction(null);
-    setQuickForm({ service: "", item: "", scheduled_at: "", notes: "", location: "", price: "", quantity: "1" });
+    setQuickForm({
+      service: "",
+      item: "",
+      scheduled_at: "",
+      notes: "",
+      customer_name: "",
+      customer_phone: "",
+      location: "",
+      price: "",
+      quantity: "1",
+      delivery_fee: "0",
+      discount: "0",
+    });
     toast({
       title:
         quickAction === "appointment" ? "Agendamento criado" : "Pedido criado",
@@ -871,11 +1197,13 @@ export default function Inbox() {
   const saveContactName = async () => {
     if (!selected?.contact || !ownerUserId) return;
     const nextName = contactNameDraft.trim();
-    const { error } = await db
+    const { data: savedContact, error } = await db
       .from("whatsapp_contacts")
-      .update({ custom_name: nextName || null, name: nextName || selected.contact.name })
+      .update({ custom_name: nextName || null })
       .eq("id", selected.contact_id)
-      .eq("user_id", ownerUserId);
+      .eq("user_id", ownerUserId)
+      .select("name")
+      .single();
 
     if (error) {
       toast({ title: "Não foi possível guardar o nome", description: error.message, variant: "destructive" });
@@ -883,19 +1211,7 @@ export default function Inbox() {
     }
 
     await load();
-    setSelected((current) =>
-      current && current.contact
-        ? {
-            ...current,
-            contact: {
-              ...current.contact,
-              custom_name: nextName || null,
-              name: nextName || current.contact.name,
-            },
-          }
-        : current,
-    );
-    setContactNameDraft(nextName || selected.contact.name || "");
+    setContactNameDraft(nextName || savedContact?.name || "");
     setProfileOpen(false);
     toast({ title: "Nome do contacto actualizado" });
   };
@@ -923,6 +1239,7 @@ export default function Inbox() {
   };
   const unreadInboundMessages = messages.filter((message) =>
     message.direction === "inbound"
+    && !message.from_me
     && !message.is_historical
     && message.delivery_status !== "read"
     && !message.read_at,
@@ -1028,6 +1345,35 @@ export default function Inbox() {
               >
                 Humano
               </Button>
+              {inboxTags.map((tag) => {
+                const active = filter === `tag:${tag.id}`;
+                return (
+                  <Button
+                    key={tag.id}
+                    className="h-7 shrink-0 px-2 text-[11px] font-semibold"
+                    size="sm"
+                    variant="outline"
+                    style={{
+                      borderColor: tag.color,
+                      backgroundColor: active ? tag.color : undefined,
+                      color: active ? getCategoryTextColor(tag.color) : undefined,
+                    }}
+                    onClick={() => setFilter(active ? "all" : `tag:${tag.id}`)}
+                  >
+                    {tag.name}
+                  </Button>
+                );
+              })}
+              {isOwner && (
+                <Button
+                  className="h-7 shrink-0 px-2 text-[11px]"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setTagManagerOpen(true)}
+                >
+                  + Etiquetas
+                </Button>
+              )}
             </div>
           </CardHeader>
           <CardContent className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
@@ -1074,6 +1420,20 @@ export default function Inbox() {
                       <span>·</span>
                       <span>{conversation.assigned_to ? attendants.find((member) => member.user_id === conversation.assigned_to)?.name || (conversation.assigned_to === user?.id ? "Atribuída a mim" : "Atribuída") : "Sem responsável"}</span>
                     </div>
+                    {(conversation.contact?.stage || conversation.contact?.tags?.length) && (
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {conversation.contact.stage && (
+                          <Badge className="h-5 px-1.5 text-[10px] font-semibold shadow-sm" style={{ backgroundColor: conversation.contact.stage.color, color: getCategoryTextColor(conversation.contact.stage.color) }}>
+                            {conversation.contact.stage.name}
+                          </Badge>
+                        )}
+                        {conversation.contact.tags?.map((tag) => (
+                          <Badge key={tag.id} className="h-5 px-1.5 text-[10px] font-semibold shadow-sm" style={{ backgroundColor: tag.color, color: getCategoryTextColor(tag.color) }}>
+                            {tag.name}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </button>
@@ -1102,7 +1462,13 @@ export default function Inbox() {
                 type="button"
                 className="flex min-w-0 flex-1 items-center gap-2 text-left"
                 disabled={!selected}
-                onClick={() => selected && setProfileOpen(true)}
+                onClick={() => {
+                  if (selected?.contact?.profile_picture_url) {
+                    setPreviewMedia({ url: selected.contact.profile_picture_url, alt: `Foto de perfil de ${selected.contact.name || selected.contact.phone_number}` });
+                  } else if (selected) {
+                    setProfileOpen(true);
+                  }
+                }}
               >
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#d7b98e] text-sm font-semibold text-[#4a3d31]">
                   {selected?.contact?.profile_picture_url ? (
@@ -1135,8 +1501,52 @@ export default function Inbox() {
                       · {selected.contact?.phone_number}
                     </div>
                   )}
+                  {selected && (selected.contact?.stage || selected.contact?.tags?.length) && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {selected.contact.stage && <Badge className="h-5 px-1.5 text-[10px] font-semibold" style={{ backgroundColor: selected.contact.stage.color, color: getCategoryTextColor(selected.contact.stage.color) }}>{selected.contact.stage.name}</Badge>}
+                      {selected.contact.tags?.map((tag) => <Badge key={tag.id} className="h-5 px-1.5 text-[10px] font-semibold" style={{ backgroundColor: tag.color, color: getCategoryTextColor(tag.color) }}>{tag.name}</Badge>)}
+                    </div>
+                  )}
                 </div>
               </button>
+              {selected && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 shrink-0 gap-1 px-2 text-xs"
+                      aria-label="Atribuir etiquetas ao cliente"
+                    >
+                      <TagIcon className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">Etiquetas</span>
+                      {(selected.contact?.tags?.length || 0) > 0 && (
+                        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-600 px-1 text-[10px] text-white">
+                          {selected.contact?.tags?.length}
+                        </span>
+                      )}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="max-h-80 w-60 overflow-y-auto">
+                    <DropdownMenuLabel>Etiquetas do cliente</DropdownMenuLabel>
+                    {inboxTags.map((tag) => (
+                      <DropdownMenuCheckboxItem
+                        key={tag.id}
+                        checked={Boolean(selected.contact?.tags?.some((item) => item.id === tag.id))}
+                        onSelect={(event) => event.preventDefault()}
+                        onCheckedChange={() => void toggleConversationTag(tag)}
+                      >
+                        <span className="mr-2 inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: tag.color }} />
+                        <span className="truncate">{tag.name}</span>
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                    {!inboxTags.length && (
+                      <div className="px-2 py-2 text-xs text-muted-foreground">Crie etiquetas no segmentador da Inbox.</div>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
               {selected && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -1230,18 +1640,32 @@ export default function Inbox() {
                               ))}
                             </div>
                           )}
+                          {message.ai_responded && (
+                            <Badge
+                              className="mb-1.5 border border-[#e7a9a9] bg-[#f7dada] px-2 py-0.5 text-[10px] font-semibold text-[#7d3030] shadow-none"
+                            >
+                              IA a responder
+                            </Badge>
+                          )}
                           {message.media_url && message.kind === "image" && (
                             <div className="mb-1">
                               {mediaStatus.loading && <div className="mb-2 rounded bg-[#f4f6f2] px-2 py-1 text-[10px] text-[#5d6d61]">Carregando imagem...</div>}
                               {!mediaStatus.error ? (
-                                <img
-                                  src={`${message.media_url}${message.media_url.includes("?") ? "&" : "?"}v=${mediaRetryKey}`}
-                                  alt="Imagem recebida"
-                                  loading="lazy"
-                                  className="max-h-72 max-w-[320px] rounded object-cover"
-                                  onLoad={() => setMediaStateMap((current) => ({ ...current, [message.id]: { loading: false, error: false } }))}
-                                  onError={() => setMediaStateMap((current) => ({ ...current, [message.id]: { loading: false, error: true } }))}
-                                />
+                                <button
+                                  type="button"
+                                  className="block cursor-zoom-in rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
+                                  aria-label="Ampliar imagem"
+                                  onClick={() => setPreviewMedia({ url: message.media_url!, alt: "Imagem da conversa" })}
+                                >
+                                  <img
+                                    src={`${message.media_url}${message.media_url.includes("?") ? "&" : "?"}v=${mediaRetryKey}`}
+                                    alt="Imagem da conversa"
+                                    loading="lazy"
+                                    className="max-h-72 max-w-[320px] rounded object-cover"
+                                    onLoad={() => setMediaStateMap((current) => ({ ...current, [message.id]: { loading: false, error: false } }))}
+                                    onError={() => setMediaStateMap((current) => ({ ...current, [message.id]: { loading: false, error: true } }))}
+                                  />
+                                </button>
                               ) : (
                                 <div className="flex max-w-[320px] flex-col gap-2 rounded border border-dashed border-[#c8b7b3] bg-[#faf3f1] p-3 text-[11px] text-[#6c534d]">
                                   <span>Erro ao carregar a imagem.</span>
@@ -1429,9 +1853,18 @@ export default function Inbox() {
             </DialogHeader>
             <div className="space-y-5">
               <div className="flex items-center gap-3">
-                <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full bg-[#d7b98e] text-xl font-semibold">
+                <button
+                  type="button"
+                  className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#d7b98e] text-xl font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
+                  aria-label="Ampliar foto de perfil"
+                  disabled={!selected.contact?.profile_picture_url}
+                  onClick={() => selected.contact?.profile_picture_url && setPreviewMedia({
+                    url: selected.contact.profile_picture_url,
+                    alt: `Foto de perfil de ${selected.contact.name || selected.contact.phone_number}`,
+                  })}
+                >
                   {selected.contact?.profile_picture_url ? <img src={selected.contact.profile_picture_url} alt="" className="h-full w-full object-cover" /> : getContactInitials(selected.contact?.name, selected.contact?.phone_number)}
-                </div>
+                </button>
                 <div>
                   <div className="text-lg font-semibold">
                     {selected.contact?.name || "Sem nome"}
@@ -1439,6 +1872,32 @@ export default function Inbox() {
                   <div className="text-sm text-muted-foreground">
                     {selected.contact?.phone_number}
                   </div>
+                </div>
+              </div>
+              <div>
+                <div className="mb-2 text-xs font-medium text-muted-foreground">Etiquetas da conversa</div>
+                <div className="flex flex-wrap gap-2">
+                  {inboxTags.map((tag) => {
+                    const active = selected.contact?.tags?.some((item) => item.id === tag.id) || false;
+                    return (
+                      <Button
+                        key={tag.id}
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="font-semibold"
+                        style={{
+                          borderColor: tag.color,
+                          backgroundColor: active ? tag.color : undefined,
+                          color: active ? getCategoryTextColor(tag.color) : undefined,
+                        }}
+                        onClick={() => void toggleConversationTag(tag)}
+                      >
+                        {tag.name}
+                      </Button>
+                    );
+                  })}
+                  {!inboxTags.length && <span className="text-xs text-muted-foreground">Crie etiquetas no segmentador para as atribuir.</span>}
                 </div>
               </div>
               <div className="grid gap-2 text-sm">
@@ -1495,6 +1954,19 @@ export default function Inbox() {
                 <Button
                   variant="outline"
                   onClick={() => {
+                    setQuickForm({
+                      service: "",
+                      item: "",
+                      scheduled_at: "",
+                      notes: "",
+                      customer_name: selected.contact?.name || "",
+                      customer_phone: selected.contact?.phone_number || "",
+                      location: "",
+                      price: "",
+                      quantity: "1",
+                      delivery_fee: "0",
+                      discount: "0",
+                    });
                     setQuickAction("order");
                     setProfileOpen(false);
                   }}
@@ -1504,6 +1976,19 @@ export default function Inbox() {
                 <Button
                   variant="outline"
                   onClick={() => {
+                    setQuickForm({
+                      service: "",
+                      item: "",
+                      scheduled_at: "",
+                      notes: "",
+                      customer_name: selected.contact?.name || "",
+                      customer_phone: selected.contact?.phone_number || "",
+                      location: "",
+                      price: "",
+                      quantity: "1",
+                      delivery_fee: "0",
+                      discount: "0",
+                    });
                     setQuickAction("appointment");
                     setProfileOpen(false);
                   }}
@@ -1515,6 +2000,76 @@ export default function Inbox() {
           </DialogContent>
         </Dialog>
       )}
+      <Dialog open={Boolean(previewMedia)} onOpenChange={(open) => !open && setPreviewMedia(null)}>
+        <DialogContent className="flex h-[min(90vh,900px)] max-w-[min(95vw,1100px)] flex-col border-0 bg-black/95 p-3 sm:p-5">
+          <DialogHeader className="shrink-0">
+            <DialogTitle className="text-white">{previewMedia?.alt || "Imagem"}</DialogTitle>
+          </DialogHeader>
+          {previewMedia && (
+            <div className="flex min-h-0 flex-1 items-center justify-center">
+              <img src={previewMedia.url} alt={previewMedia.alt} className="max-h-full max-w-full object-contain" />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={tagManagerOpen} onOpenChange={setTagManagerOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Etiquetas do segmentador</DialogTitle>
+            <DialogDescription>Crie categorias, escolha as cores e use-as para filtrar conversas.</DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-2">
+            <Input
+              aria-label="Nome da nova etiqueta"
+              placeholder="Nome da etiqueta"
+              value={newTag.name}
+              onChange={(event) => setNewTag((current) => ({ ...current, name: event.target.value }))}
+              onKeyDown={(event) => { if (event.key === "Enter") void createInboxTag(); }}
+            />
+            <Input
+              aria-label="Cor da nova etiqueta"
+              className="h-10 w-12 shrink-0 p-1"
+              type="color"
+              value={newTag.color}
+              onChange={(event) => setNewTag((current) => ({ ...current, color: event.target.value }))}
+            />
+            <Button disabled={savingTag || !newTag.name.trim()} onClick={() => void createInboxTag()}>
+              {savingTag ? "A guardar..." : "Adicionar"}
+            </Button>
+          </div>
+          <div className="space-y-2">
+            {inboxTags.map((tag) => (
+              <div key={tag.id} className="flex items-center gap-2 rounded-md border p-2">
+                <Input
+                  aria-label={`Nome: ${tag.name}`}
+                  className="h-9"
+                  defaultValue={tag.name}
+                  onBlur={(event) => {
+                    const name = event.currentTarget.value.trim();
+                    if (name && name !== tag.name) void updateInboxTag(tag, { name });
+                    else if (!name) event.currentTarget.value = tag.name;
+                  }}
+                  onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
+                />
+                <Input
+                  aria-label={`Cor: ${tag.name}`}
+                  className="h-9 w-12 shrink-0 p-1"
+                  type="color"
+                  defaultValue={tag.color}
+                  onBlur={(event) => {
+                    if (event.currentTarget.value !== tag.color) {
+                      void updateInboxTag(tag, { color: event.currentTarget.value });
+                    }
+                  }}
+                />
+                <Badge className="max-w-28 truncate font-semibold" style={{ backgroundColor: tag.color, color: getCategoryTextColor(tag.color) }}>{tag.name}</Badge>
+                <Button size="sm" variant="ghost" className="text-destructive" onClick={() => void deleteInboxTag(tag)}>Eliminar</Button>
+              </div>
+            ))}
+            {!inboxTags.length && <p className="py-2 text-sm text-muted-foreground">Ainda não existem etiquetas.</p>}
+          </div>
+        </DialogContent>
+      </Dialog>
       <Dialog open={newConversationOpen} onOpenChange={setNewConversationOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -1549,7 +2104,7 @@ export default function Inbox() {
         open={Boolean(quickAction)}
         onOpenChange={(open) => !open && setQuickAction(null)}
       >
-        <DialogContent>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {quickAction === "appointment"
@@ -1576,13 +2131,68 @@ export default function Inbox() {
                 />
               </>
             ) : (
-              <Input
-                placeholder="Produto ou descrição"
-                value={quickForm.item}
-                onChange={(event) =>
-                  setQuickForm({ ...quickForm, item: event.target.value })
-                }
-              />
+              <>
+                <Input
+                  placeholder="Nome do cliente"
+                  value={quickForm.customer_name}
+                  onChange={(event) => setQuickForm({ ...quickForm, customer_name: event.target.value })}
+                  required
+                />
+                <Input
+                  placeholder="Telefone"
+                  value={quickForm.customer_phone}
+                  onChange={(event) => setQuickForm({ ...quickForm, customer_phone: event.target.value })}
+                  required
+                />
+                <Input
+                  placeholder="Localização / endereço de entrega"
+                  value={quickForm.location}
+                  onChange={(event) => setQuickForm({ ...quickForm, location: event.target.value })}
+                />
+                <div className="grid gap-3 sm:grid-cols-[1fr_110px_140px]">
+                  <Input
+                    placeholder="Produto ou descrição"
+                    value={quickForm.item}
+                    onChange={(event) => setQuickForm({ ...quickForm, item: event.target.value })}
+                    required
+                  />
+                  <Input
+                    type="number"
+                    min="1"
+                    placeholder="Quantidade"
+                    value={quickForm.quantity}
+                    onChange={(event) => setQuickForm({ ...quickForm, quantity: event.target.value })}
+                    required
+                  />
+                  <Input
+                    type="number"
+                    min="0"
+                    placeholder="Preço unitário (Kz)"
+                    value={quickForm.price}
+                    onChange={(event) => setQuickForm({ ...quickForm, price: event.target.value })}
+                    required
+                  />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Input
+                    type="number"
+                    min="0"
+                    placeholder="Taxa de entrega (Kz)"
+                    value={quickForm.delivery_fee}
+                    onChange={(event) => setQuickForm({ ...quickForm, delivery_fee: event.target.value })}
+                  />
+                  <Input
+                    type="number"
+                    min="0"
+                    placeholder="Desconto (Kz)"
+                    value={quickForm.discount}
+                    onChange={(event) => setQuickForm({ ...quickForm, discount: event.target.value })}
+                  />
+                </div>
+                <p className="text-sm font-medium">
+                  Total: {Math.max(0, (Number(quickForm.price) || 0) * (Number(quickForm.quantity) || 0) + (Number(quickForm.delivery_fee) || 0) - (Number(quickForm.discount) || 0)).toLocaleString("pt-AO")} Kz
+                </p>
+              </>
             )}
             <Textarea
               placeholder="Nota interna"

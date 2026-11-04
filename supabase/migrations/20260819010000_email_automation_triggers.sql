@@ -2,7 +2,7 @@
 -- Configure Vault secrets before enabling production triggers:
 --   SUPABASE_URL
 --   SUPABASE_SERVICE_ROLE_KEY
--- The ZeptoMail secret is read only by the send-email Edge Function.
+-- The Zoho ZeptoMail secret is read only by the send-email Edge Function.
 
 create extension if not exists pg_net;
 create extension if not exists supabase_vault with schema vault;

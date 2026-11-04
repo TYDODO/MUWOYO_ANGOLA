@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 
 type AssignedConversation = {
   id: string;
+  contact_id: string;
   unread_count: number;
   last_message_at: string | null;
   last_message_preview: string | null;

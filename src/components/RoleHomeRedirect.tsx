@@ -2,6 +2,7 @@ import { Navigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { useRole } from "@/hooks/useRole";
 import { useBusinessMembership } from "@/hooks/useBusinessMembership";
+import { useDeliveryPerson } from "@/hooks/useDeliveryPerson";
 
 export default function RoleHomeRedirect({
   children,
@@ -10,10 +11,11 @@ export default function RoleHomeRedirect({
 }) {
   const { role, loading } = useRole();
   const { membership, loading: membershipLoading } = useBusinessMembership();
+  const { deliveryPerson, loading: deliveryLoading } = useDeliveryPerson();
 
   console.log("RoleHomeRedirect debug - role:", role, "loading:", loading);
 
-  if (loading || membershipLoading)
+  if (loading || membershipLoading || deliveryLoading)
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -28,6 +30,7 @@ export default function RoleHomeRedirect({
     return <Navigate to="/gestor" replace />;
   }
   if (membership?.role === "attendant") return <Navigate to="/atendente" replace />;
+  if (deliveryPerson?.status === "active") return <Navigate to="/entregador" replace />;
   console.log("RoleHomeRedirect - mantendo em /dashboard");
   return <>{children}</>;
 }

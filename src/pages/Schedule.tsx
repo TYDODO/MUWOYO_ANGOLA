@@ -74,6 +74,7 @@ const statusStyles: Record<string, string> = {
   pending: "bg-amber-100 text-amber-800",
   canceled: "bg-red-100 text-red-800",
   completed: "bg-sky-100 text-sky-800",
+  expired: "bg-slate-200 text-slate-700",
   default: "bg-slate-100 text-slate-800",
 };
 
@@ -82,6 +83,7 @@ const statusLabel: Record<string, string> = {
   pending: "Pendente",
   canceled: "Cancelado",
   completed: "Concluído",
+  expired: "Expirado",
 };
 
 function scheduleErrorMessage(error: { code?: string; message?: string }) {
@@ -120,15 +122,20 @@ export default function Schedule() {
     if (!user) return;
 
     const syncExpiredAppointments = async () => {
-      try {
-        await supabase.rpc("update_expired_appointments");
-      } catch {
-        // ignore RPC errors for the schedule refresh path
+      const { error } = await supabase.rpc("update_expired_appointments");
+      if (error) {
+        toast({
+          title: "Não foi possível expirar agendamentos passados",
+          description: error.message,
+          variant: "destructive",
+        });
+        return;
       }
+      await load();
     };
 
     void syncExpiredAppointments();
-    void load();
+    const expirationRefresh = window.setInterval(() => void syncExpiredAppointments(), 60_000);
 
     const channel = supabase
       .channel(`appts-${user.id}`)
@@ -145,6 +152,7 @@ export default function Schedule() {
       .subscribe();
 
     return () => {
+      window.clearInterval(expirationRefresh);
       supabase.removeChannel(channel);
     };
   }, [user]);
@@ -175,7 +183,7 @@ export default function Schedule() {
   const editAppointment = (appointment: Appt) => {
     setEditingId(appointment.id);
     const date = appointment.scheduled_at ? new Date(appointment.scheduled_at) : new Date();
-    setManualForm({ customer_name: appointment.customer_name || "", customer_phone: appointment.customer_phone || "", service: appointment.service || "", description: appointment.description || "", scheduled_at: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}T${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`, status: appointment.status });
+    setManualForm({ customer_name: appointment.customer_name || "", customer_phone: appointment.customer_phone || "", service: appointment.service || "", description: appointment.description || "", scheduled_at: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}T${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`, status: appointment.status === "expired" ? "pending" : appointment.status });
     setManualOpen(true);
   };
 
@@ -432,7 +440,9 @@ export default function Schedule() {
                         )}
                         <div className="mt-3 flex flex-wrap gap-2">
                           <Button size="sm" variant="outline" onClick={() => editAppointment(appt)}>Editar</Button>
-                          <Button size="sm" variant="outline" onClick={() => void updateAppointmentStatus(appt.id, appt.status === "confirmed" ? "completed" : "confirmed")}>{appt.status === "confirmed" ? "Marcar concluído" : "Confirmar"}</Button>
+                          {appt.status !== "expired" && (
+                            <Button size="sm" variant="outline" onClick={() => void updateAppointmentStatus(appt.id, appt.status === "confirmed" ? "completed" : "confirmed")}>{appt.status === "confirmed" ? "Marcar concluído" : "Confirmar"}</Button>
+                          )}
                           <Button size="sm" variant="destructive" onClick={() => void deleteAppointment(appt.id)}>Eliminar</Button>
                         </div>
                       </div>

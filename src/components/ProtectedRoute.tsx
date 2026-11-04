@@ -6,11 +6,13 @@ import { Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useRole } from "@/hooks/useRole";
 import { useBusinessMembership } from "@/hooks/useBusinessMembership";
+import { useDeliveryPerson } from "@/hooks/useDeliveryPerson";
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading, signOut } = useAuth();
   const { role, loading: roleLoading } = useRole();
   const { membership, loading: membershipLoading, hasPermission } = useBusinessMembership();
+  const { deliveryPerson, loading: deliveryLoading } = useDeliveryPerson();
   const location = useLocation();
   const { toast } = useToast();
   const [checked, setChecked] = useState(false);
@@ -43,9 +45,12 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
     });
   }, [user, role]);
 
-  if (loading || roleLoading || membershipLoading || !checked) return <div className="flex min-h-screen items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
+  if (loading || roleLoading || membershipLoading || deliveryLoading || !checked) return <div className="flex min-h-screen items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
   if (!user || suspended) return <Navigate to="/login" replace />;
   if (role !== "admin" && role !== "sub_admin" && !emailVerified) return <Navigate to="/confirmar-email" replace state={{ email: user.email }} />;
+  if (deliveryPerson && deliveryPerson.status !== "active") return <Navigate to="/login" replace />;
+  if (deliveryPerson?.status === "active" && location.pathname !== "/entregador") return <Navigate to="/entregador" replace />;
+  if (location.pathname === "/entregador" && deliveryPerson?.status !== "active") return <Navigate to="/dashboard" replace />;
   if (membership?.role === "attendant" && membership.status !== "active") return <Navigate to="/login" replace />;
   if (membership?.role === "attendant" && location.pathname !== "/atendente") {
     const permissionByPath: Record<string, string> = { "/inbox": "inbox.view", "/whatsapp": "contacts.view", "/crm": "crm.view", "/pedidos": "orders.view", "/agenda": "agenda.view", "/produtos": "products.view" };

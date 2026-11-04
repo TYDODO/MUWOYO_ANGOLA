@@ -78,6 +78,8 @@ export default function WhatsAppConnectDialog({
       .from("instances")
       .select("instance_name")
       .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
     const existing = data?.instance_name;
     if (existing) return existing;
@@ -111,28 +113,26 @@ export default function WhatsAppConnectDialog({
       clearInterval(pollRef.current);
       pollRef.current = null;
     }
-    if (instanceName) {
-      try {
-        const { error } = await invokeEvolution({ action: "fetchInfo", instanceName });
-        if (error) console.warn("Could not refresh connected WhatsApp details", error.message);
-      } catch (error) {
-        console.warn("Could not refresh connected WhatsApp details", error);
-      }
-    }
     toast({ title: "Conectado!", description: "WhatsApp conectado com sucesso." });
     onConnected();
     onOpenChange(false);
+    if (instanceName) {
+      void invokeEvolution({ action: "fetchInfo", instanceName }).then(({ error }) => {
+        if (error) console.warn("Could not refresh connected WhatsApp details", error.message);
+      }).catch((error) => console.warn("Could not refresh connected WhatsApp details", error));
+    }
   }, [instanceName, onConnected, onOpenChange, toast]);
 
   useEffect(() => {
-    if (!open || !user || !instanceName) return;
+    const userId = user?.id;
+    if (!open || !userId || !instanceName) return;
     const channel = supabase
-      .channel(`whatsapp-connect-${user.id}-${instanceName}`)
+      .channel(`whatsapp-connect-${userId}-${instanceName}`)
       .on("postgres_changes", {
         event: "UPDATE",
         schema: "public",
         table: "instances",
-        filter: `user_id=eq.${user.id}`,
+        filter: `user_id=eq.${userId}`,
       }, (payload) => {
         const row = payload.new as { instance_name?: string; connection_state?: string; status?: string };
         if (row.instance_name === instanceName && ["open", "connected"].includes(String(row.connection_state || row.status))) {
@@ -152,11 +152,7 @@ export default function WhatsAppConnectDialog({
           await completeConnection();
         }
       } catch (error) {
-        console.warn("Function getStatus not available:", error);
-        if (pollRef.current) {
-          clearInterval(pollRef.current);
-          pollRef.current = null;
-        }
+        console.warn("Function getStatus temporarily unavailable; will retry:", error);
       }
     }, 4000);
   };
@@ -182,12 +178,7 @@ export default function WhatsAppConnectDialog({
         });
       }
       if (data.connected || data.state === "open") {
-        toast({
-          title: "Conectado!",
-          description: "WhatsApp conectado com sucesso.",
-        });
-        onConnected();
-        onOpenChange(false);
+        void completeConnection();
         return;
       }
       if (!data.qrBase64 && !data.qrCodeText)
@@ -228,12 +219,7 @@ export default function WhatsAppConnectDialog({
       setLoading(false);
       if (error || !data?.pairingCode) {
         if (data?.connected || data?.state === "open") {
-          toast({
-            title: "Conectado!",
-            description: "WhatsApp conectado com sucesso.",
-          });
-          onConnected();
-          onOpenChange(false);
+          void completeConnection();
           return;
         }
         const description = await getFunctionErrorMessage(error, "Falha ao gerar código");

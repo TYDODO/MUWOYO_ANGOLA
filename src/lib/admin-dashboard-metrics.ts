@@ -7,6 +7,8 @@ export type DashboardProfile = {
   account_status?: string | null;
   is_suspended?: boolean | null;
   status?: string | null;
+  trial_expires_at?: string | null;
+  subscription_expires_at?: string | null;
   message_limit?: number | null;
   messages_received?: number | null;
   trial_started_at?: string | null;
@@ -17,7 +19,8 @@ export type DashboardSubscription = {
   status?: string | null;
   confirmed_at?: string | null;
   submitted_at?: string | null;
-  amount_kz?: number | null;
+  expires_at?: string | null;
+  plan_price_kz?: number | null;
 };
 
 export type DashboardInstance = {
@@ -40,7 +43,7 @@ export type DashboardMetrics = {
   recentPayingCustomers: number;
   repeatBuyers: number;
   creditDepleted: number;
-  totalConfirmedRevenue: number;
+  estimatedPlanValue: number;
 };
 
 function toDate(value: string | null | undefined): Date | null {
@@ -56,7 +59,7 @@ function inRange(value: string | null | undefined, start: Date, end: Date): bool
 }
 
 function confirmedPayment(subscription: DashboardSubscription): boolean {
-  return Boolean(subscription.status === "active" || subscription.status === "confirmed") && Boolean(subscription.confirmed_at || subscription.submitted_at);
+  return Boolean(subscription.status === "active" || subscription.status === "expired" || subscription.status === "confirmed") && Boolean(subscription.confirmed_at);
 }
 
 function getRangeWindow(range: RangeKey, now: Date = new Date()) {
@@ -113,8 +116,17 @@ export function buildAdminDashboardMetrics({
 
   const totalUsers = profiles.length;
   const newUsers = profiles.filter((profile) => inRange(profile.created_at, rangeWindow.start, rangeWindow.end)).length;
-  const activeUsers = profiles.filter((profile) => !profile.is_suspended && profile.status !== "suspended" && profile.account_status !== "inactive").length;
-  const inactiveUsers = profiles.filter((profile) => profile.is_suspended || profile.status === "suspended" || profile.account_status === "inactive").length;
+  const activeSubscriptionIds = new Set(subscriptions
+    .filter((subscription) => subscription.status === "active" && subscription.user_id && (!subscription.expires_at || Boolean(toDate(subscription.expires_at) && toDate(subscription.expires_at)! > now)))
+    .map((subscription) => subscription.user_id as string));
+  const isOperational = (profile: DashboardProfile) => {
+    if (profile.is_suspended || profile.status === "suspended") return false;
+    if (profile.user_id && activeSubscriptionIds.has(profile.user_id)) return true;
+    if (profile.account_status === "active") return !profile.subscription_expires_at || Boolean(toDate(profile.subscription_expires_at) && toDate(profile.subscription_expires_at)! > now);
+    return profile.account_status === "trial" && Boolean(profile.trial_started_at) && (!profile.trial_expires_at || Boolean(toDate(profile.trial_expires_at) && toDate(profile.trial_expires_at)! > now));
+  };
+  const activeUsers = profiles.filter(isOperational).length;
+  const inactiveUsers = totalUsers - activeUsers;
   const onboardingCompleted = profiles.filter((profile) => Boolean(profile.onboarding_completed)).length;
 
   const connectedUserIds = new Set(
@@ -128,7 +140,7 @@ export function buildAdminDashboardMetrics({
       .map((instance) => instance.user_id as string),
   ).size;
 
-  const trialUsers = profiles.filter((profile) => profile.account_status === "trial" && Boolean(profile.trial_started_at)).length;
+  const trialUsers = profiles.filter((profile) => profile.account_status === "trial" && Boolean(profile.trial_started_at) && (!profile.trial_expires_at || Boolean(toDate(profile.trial_expires_at) && toDate(profile.trial_expires_at)! > now))).length;
 
   const confirmedSubscriptions = subscriptions.filter((subscription) => confirmedPayment(subscription));
   const paidCustomerIds = new Set(confirmedSubscriptions.map((subscription) => subscription.user_id).filter(Boolean) as string[]);
@@ -152,7 +164,7 @@ export function buildAdminDashboardMetrics({
   ).size;
 
   const creditDepleted = profiles.filter((profile) => Number(profile.message_limit || 0) - Number(profile.messages_received || 0) <= 0).length;
-  const totalConfirmedRevenue = confirmedSubscriptions.reduce((sum, subscription) => sum + Number(subscription.amount_kz || 0), 0);
+  const estimatedPlanValue = confirmedSubscriptions.reduce((sum, subscription) => sum + Number(subscription.plan_price_kz || 0), 0);
 
   return {
     totalUsers,
@@ -167,6 +179,6 @@ export function buildAdminDashboardMetrics({
     recentPayingCustomers: recentPayingCustomerIds.size,
     repeatBuyers,
     creditDepleted,
-    totalConfirmedRevenue,
+    estimatedPlanValue,
   };
 }

@@ -1,8 +1,17 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import {
+  ArrowDownRight,
+  ArrowUpRight,
   Ban,
+  Bell,
+  CalendarDays,
   Coins,
+  CreditCard,
+  ExternalLink,
+  MapPin,
   MessageSquarePlus,
+  Package,
   RefreshCw,
   Shield,
   CheckCircle2,
@@ -11,6 +20,20 @@ import {
   Users,
   Wallet,
 } from "lucide-react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import AdminShell from "@/components/AdminShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,6 +63,7 @@ import { buildAdminDashboardMetrics, type RangeKey } from "@/lib/admin-dashboard
 type Row = {
   user_id: string;
   full_name: string | null;
+  email?: string | null;
   phone: string | null;
   status: string | null;
   is_suspended: boolean | null;
@@ -50,16 +74,29 @@ type Row = {
   business_name: string | null;
   account_status?: string | null;
   trial_started_at?: string | null;
+  trial_expires_at?: string | null;
+  subscription_expires_at?: string | null;
+  has_valid_subscription?: boolean;
   acquisition_source?: string | null;
   province?: string | null;
   plan_id?: string | null;
   instances?: { instance_name?: string | null }[];
   role?: string;
 };
+type ActivityRow = { id: string; title: string; message: string; type: string; created_at: string; link: string | null };
+type TopUpRow = { id: string; amount_kz: number; status: string; request_type: string; created_at: string; confirmed_at: string | null; approved_at: string | null };
+type ChartPoint = { key: string; label: string; registered: number; active: number; revenue: number };
 const sb = supabase as any;
+const isOperationalUser = (user: Row) => {
+  if (user.is_suspended || user.status === "suspended") return false;
+  if (user.has_valid_subscription) return true;
+  if (user.account_status === "active") return !user.subscription_expires_at || new Date(user.subscription_expires_at).getTime() > Date.now();
+  return user.account_status === "trial" && Boolean(user.trial_started_at) && (!user.trial_expires_at || new Date(user.trial_expires_at).getTime() > Date.now());
+};
 
 export default function AdminDashboard() {
   const { user: adminUser } = useAuth();
+  const location = useLocation();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [users, setUsers] = useState<Row[]>([]);
@@ -67,6 +104,12 @@ export default function AdminDashboard() {
   const [filter, setFilter] = useState("all");
   const [range, setRange] = useState<RangeKey>("30d");
   const [metrics, setMetrics] = useState(() => buildAdminDashboardMetrics({ profiles: [], subscriptions: [], instances: [], range: "30d" }));
+  const [plans, setPlans] = useState<{ id: string; name: string; price_kz: number }[]>([]);
+  const [topUps, setTopUps] = useState<TopUpRow[]>([]);
+  const [activity, setActivity] = useState<ActivityRow[]>([]);
+  const [instanceRows, setInstanceRows] = useState<any[]>([]);
+  const [dashboardProfiles, setDashboardProfiles] = useState<Row[]>([]);
+  const [loadError, setLoadError] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [subOpen, setSubOpen] = useState(false);
   const [notice, setNotice] = useState({
@@ -108,27 +151,52 @@ export default function AdminDashboard() {
   }, [adminUser, search, filter]);
   
   const load = async (nextRange: RangeKey = range) => {
-    const [{ data: profiles }, { data: subscriptions }, { data: instances }, { data: roles }] = await Promise.all([
+    const [profileResult, subscriptionResult, instanceResult, roleResult, planResult, topUpResult, activityResult] = await Promise.all([
       sb.from("profiles").select(
-        "user_id,full_name,phone,status,is_suspended,message_limit,messages_received,created_at,created_by,business_name,account_status,trial_started_at,acquisition_source,plan_id,subscription_expires_at,onboarding_completed,province",
+        "user_id,full_name,email,phone,status,is_suspended,message_limit,messages_received,created_at,created_by,business_name,account_status,trial_started_at,trial_expires_at,acquisition_source,plan_id,subscription_expires_at,onboarding_completed,province",
       ).order("created_at", { ascending: false }),
-      sb.from("plan_subscriptions").select("user_id,status,confirmed_at,submitted_at,amount_kz").order("confirmed_at", { ascending: false }),
+      sb.from("plan_subscriptions").select("user_id,plan_id,status,confirmed_at,submitted_at,expires_at").order("confirmed_at", { ascending: false }),
       sb.from("instances").select("user_id,status,connection_state,automation_paused").order("updated_at", { ascending: false }),
       sb.from("user_roles").select("user_id,role"),
+      sb.from("subscription_plans").select("id,name,price_kz"),
+      sb.from("top_up_requests").select("id,amount_kz,status,request_type,created_at,confirmed_at,approved_at").order("created_at", { ascending: false }),
+      sb.from("notifications").select("id,title,message,type,created_at,link").order("created_at", { ascending: false }).limit(6),
     ]);
+    const { data: profiles, error: profilesError } = profileResult;
+    const { data: subscriptions, error: subscriptionsError } = subscriptionResult;
+    const { data: instances, error: instancesError } = instanceResult;
+    const { data: roles, error: rolesError } = roleResult;
+    const { data: planRows, error: plansError } = planResult;
+    const { data: topUpRows, error: topUpsError } = topUpResult;
+    const { data: activityRows, error: activityError } = activityResult;
+    const failedQueries = [profilesError, subscriptionsError, instancesError, rolesError, plansError, topUpsError, activityError].filter(Boolean);
+    setLoadError(failedQueries.length ? failedQueries.map((query: any) => query.message).join(" · ") : "");
+    const planPrices = new Map((planRows || []).map((plan: any) => [plan.id, Number(plan.price_kz || 0)]));
+    const pricedSubscriptions = (subscriptions || []).map((subscription: any) => ({
+      ...subscription,
+      plan_price_kz: planPrices.get(subscription.plan_id) || 0,
+    }));
 
+    const activeSubscriptionIds = new Set((subscriptions || []).filter((subscription: any) => subscription.status === "active" && (!subscription.expires_at || new Date(subscription.expires_at).getTime() > Date.now())).map((subscription: any) => subscription.user_id));
     const roleMap = new Map((roles || []).map((r: any) => [r.user_id, r.role]));
     const rows = (profiles || []).map((p: Row) => ({
       ...p,
       role: roleMap.get(p.user_id) || "client",
+      has_valid_subscription: activeSubscriptionIds.has(p.user_id),
     }));
 
+    setDashboardProfiles(rows);
+    setPlans((planRows || []).map((plan: any) => ({ ...plan, price_kz: Number(plan.price_kz || 0) })));
+    setTopUps((topUpRows || []).map((row: TopUpRow) => ({ ...row, amount_kz: Number(row.amount_kz || 0) })));
+    setActivity(activityRows || []);
+    setInstanceRows(instances || []);
+    setPlanNames(Object.fromEntries((planRows || []).map((plan: any) => [plan.id, plan.name])));
     setUsers(rows.filter((r: Row) => r.role === "client"));
     setSubs(rows.filter((r: Row) => r.role === "sub_admin"));
     setMetrics(
       buildAdminDashboardMetrics({
         profiles: profiles || [],
-        subscriptions: subscriptions || [],
+        subscriptions: pricedSubscriptions,
         instances: instances || [],
         range: nextRange,
       }),
@@ -138,21 +206,29 @@ export default function AdminDashboard() {
   useEffect(() => {
     void load(range);
   }, [range]);
+
+  useEffect(() => {
+    const targetId = location.hash.slice(1);
+    if (!targetId) return;
+    requestAnimationFrame(() => document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }, [location.hash]);
   const filtered = users
     .filter((u) =>
       filter === "active"
-        ? !u.is_suspended && u.status !== "suspended"
+        ? isOperationalUser(u)
+        : filter === "inactive"
+          ? !isOperationalUser(u)
         : filter === "suspended"
           ? u.is_suspended || u.status === "suspended"
           : filter === "empty"
             ? Number(u.message_limit || 0) - Number(u.messages_received || 0) <=
               0
             : filter === "trial"
-              ? u.account_status === "trial" && Boolean(u.trial_started_at)
+                ? u.account_status === "trial" && Boolean(u.trial_started_at) && (!u.trial_expires_at || new Date(u.trial_expires_at).getTime() > Date.now())
               : filter === "awaiting_activation"
                 ? u.account_status === "awaiting_activation"
                 : filter === "commercial_active"
-                  ? u.account_status === "active"
+                  ? Boolean(u.has_valid_subscription || u.account_status === "active" && (!u.subscription_expires_at || new Date(u.subscription_expires_at).getTime() > Date.now()))
             : true,
     )
     .filter((u) =>
@@ -200,17 +276,15 @@ export default function AdminDashboard() {
       setSubOpen(false);
     }
   };
-  const active = users.filter(
-      (u) => !u.is_suspended && u.status !== "suspended",
-    ).length,
+  const active = users.filter(isOperationalUser).length,
     suspended = users.length - active,
     empty = users.filter(
       (u) =>
         Number(u.message_limit || 0) - Number(u.messages_received || 0) <= 0,
     ).length,
-    trial = users.filter((u) => u.account_status === "trial" && Boolean(u.trial_started_at)).length,
+    trial = users.filter((u) => u.account_status === "trial" && Boolean(u.trial_started_at) && (!u.trial_expires_at || new Date(u.trial_expires_at).getTime() > Date.now())).length,
     awaitingActivation = users.filter((u) => u.account_status === "awaiting_activation").length,
-    commercialActive = users.filter((u) => u.account_status === "active").length;
+    commercialActive = users.filter((u) => u.has_valid_subscription || u.account_status === "active" && (!u.subscription_expires_at || new Date(u.subscription_expires_at).getTime() > Date.now())).length;
   const submitNotice = async (e: FormEvent) => {
     e.preventDefault();
     const targetRoles = Object.entries(notice.targets)
@@ -306,7 +380,7 @@ export default function AdminDashboard() {
         <Stat label="Utilizadores registados" value={metrics.totalUsers} icon={<Users />} onClick={() => setFilter("all")} />
         <Stat label="Novos registos" value={metrics.newUsers} icon={<UserPlus />} onClick={() => setFilter("all")} />
         <Stat label="Utilizadores ativos" value={metrics.activeUsers} icon={<CheckCircle2 />} onClick={() => setFilter("active")} />
-        <Stat label="Utilizadores inativos" value={metrics.inactiveUsers} icon={<Ban />} onClick={() => setFilter("suspended")} />
+        <Stat label="Utilizadores inativos" value={metrics.inactiveUsers} icon={<Ban />} onClick={() => setFilter("inactive")} />
         <Stat label="Configuração concluída" value={metrics.onboardingCompleted} icon={<Shield />} onClick={() => setFilter("all")} />
         <Stat label="WhatsApp ligados" value={metrics.connectedWhatsApp} icon={<MessageSquarePlus />} onClick={() => setFilter("all")} />
         <Stat label="Automação operacional" value={metrics.automationOperational} icon={<RefreshCw />} onClick={() => setFilter("all")} />
@@ -314,7 +388,7 @@ export default function AdminDashboard() {
         <Stat label="Clientes pagantes" value={metrics.paidCustomers} icon={<Wallet />} onClick={() => setFilter("all")} />
         <Stat label="Recompra" value={metrics.repeatBuyers} icon={<Coins />} onClick={() => setFilter("all")} />
         <Stat label="Créditos esgotados" value={metrics.creditDepleted} icon={<MessageSquarePlus />} onClick={() => setFilter("empty")} />
-        <Stat label="Receita confirmada" value={`${metrics.totalConfirmedRevenue.toLocaleString("pt-AO")} Kz`} icon={<Coins />} onClick={() => setFilter("all")} />
+        <Stat label="Valor estimado dos planos" value={`${metrics.estimatedPlanValue.toLocaleString("pt-AO")} Kz`} icon={<Coins />} onClick={() => setFilter("all")} />
       </div>
       {search.trim() && (
         <Card>
@@ -420,6 +494,7 @@ export default function AdminDashboard() {
         }
         onDelete={(u) => window.confirm(`Tem certeza que deseja eliminar ${u.full_name || "este usuário"}?`) && call({ action: "deleteUser", userId: u.user_id })}
       />
+      <div id="subadmins" className="scroll-mt-24">
       <UserTable
         title="Subadmins"
         rows={subs.filter((s) =>
@@ -440,8 +515,9 @@ export default function AdminDashboard() {
         }
         onDelete={(u) => window.confirm(`Tem certeza que deseja eliminar ${u.full_name || "este usuário"}?`) && call({ action: "deleteUser", userId: u.user_id })}
       />
+      </div>
       
-      <Card>
+      <Card id="notifications" className="scroll-mt-24">
         <CardHeader>
           <CardTitle>Enviar notificação em massa</CardTitle>
         </CardHeader>
@@ -687,7 +763,9 @@ function UserTable({ title, rows, planNames, onEdit, onMsg, onEditLimit, onSuspe
                         ? "Conta criada"
                       : u.account_status === "awaiting_activation"
                         ? "Aguardando ativação"
-                        : "Ativo"}
+                        : isOperationalUser(u)
+                          ? "Ativo"
+                          : "Inativo"}
                 </td>
                 <td className="space-x-2 text-right">
                   <Button size="sm" variant="outline" onClick={() => onEdit(u)}>

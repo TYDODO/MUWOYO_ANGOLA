@@ -11,14 +11,21 @@ const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SEND_VERIFICATION_URL = `${SUPABASE_URL}/functions/v1/send-verification-code`;
 const admin = createClient(SUPABASE_URL, SERVICE_KEY);
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-const permissions = ["inbox.view", "inbox.send", "inbox.assign", "inbox.view_unassigned", "contacts.view", "contacts.edit", "crm.view", "crm.edit", "orders.view", "orders.create", "orders.edit", "agenda.view", "agenda.create", "agenda.edit", "products.view", "products.edit"];
+const permissions = ["inbox.view", "inbox.send", "inbox.assign", "inbox.view_unassigned", "inbox.manage", "contacts.view", "contacts.edit", "contacts.delete", "crm.view", "crm.edit", "crm.manage", "orders.view", "orders.create", "orders.edit", "orders.delete", "agenda.view", "agenda.create", "agenda.edit", "agenda.delete", "products.view", "products.create", "products.edit", "products.delete"];
+const permissionRow = (businessId: string, memberId: string, permission: string, scopes: Record<string, unknown> = {}) => ({
+  business_id: businessId,
+  member_id: memberId,
+  permission,
+  enabled: true,
+  data_scope: scopes[permission] === "own" ? "own" : "all",
+});
 
 async function sendAttendantVerification(email: string) {
   const response = await fetch(SEND_VERIFICATION_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", apikey: ANON_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
     body: JSON.stringify({ email }),
-    signal: AbortSignal.timeout(12000),
+    signal: AbortSignal.timeout(40000),
   });
   const result = await response.json().catch(() => null);
   return { ok: response.ok && result?.success === true, error: result?.error || null };
@@ -69,13 +76,13 @@ Deno.serve(async (req) => {
       const limit = await maxAttendants(businessId);
       const { count } = await admin.from("business_members").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("role", "attendant").neq("status", "removed");
       if ((count || 0) >= limit) return json({ error: "attendant_limit_reached", limit }, 409);
-      const created = await admin.auth.admin.createUser({ email, password, email_confirm: false, user_metadata: { full_name: name } });
+      const created = await admin.auth.admin.createUser({ email, password, email_confirm: false, user_metadata: { full_name: name, business_member_role: "attendant" } });
       if (created.error || !created.data.user) return json({ error: created.error?.message || "auth_create_failed" }, 400);
       const user = created.data.user;
       const { data: member, error: memberError } = await admin.from("business_members").insert({ business_id: businessId, user_id: user.id, role: "attendant", status: "pending", name, email }).select("id").single();
       if (memberError) { await admin.auth.admin.deleteUser(user.id); return json({ error: memberError.message }, 400); }
       const selected = Array.isArray(body.permissions) ? body.permissions.filter((item: unknown) => permissions.includes(String(item))) : ["inbox.view", "inbox.send"];
-      await admin.from("business_member_permissions").insert(selected.map((permission: string) => ({ business_id: businessId, member_id: member.id, permission, enabled: true })));
+      await admin.from("business_member_permissions").insert(selected.map((permission: string) => permissionRow(businessId, member.id, permission, body.permission_scopes || {})));
       await admin.from("business_audit_log").insert({ business_id: businessId, actor_user_id: current.user.id, target_user_id: user.id, action: "member_created", metadata: { email, permissions: selected } });
       const verification = await sendAttendantVerification(email).catch((error) => ({ ok: false, error: error instanceof Error ? error.message : "temporary_error" }));
       return json({ ok: true, member_id: member.id, user_id: user.id, status: "pending", verification_sent: verification.ok, verification_error: verification.ok ? null : verification.error });
@@ -91,9 +98,10 @@ Deno.serve(async (req) => {
     }
     if (action === "permissions") {
       const selected = Array.isArray(body.permissions) ? body.permissions.map(String).filter((item: string) => permissions.includes(item)) : [];
+      const scopes = body.permission_scopes && typeof body.permission_scopes === "object" ? body.permission_scopes as Record<string, unknown> : {};
       await admin.from("business_member_permissions").delete().eq("member_id", memberId);
-      if (selected.length) await admin.from("business_member_permissions").insert(selected.map((permission: string) => ({ business_id: businessId, member_id: memberId, permission, enabled: true })));
-      await admin.from("business_audit_log").insert({ business_id: businessId, actor_user_id: current.user.id, target_user_id: target.user_id, action: "member_permissions_updated", metadata: { permissions: selected } });
+      if (selected.length) await admin.from("business_member_permissions").insert(selected.map((permission: string) => permissionRow(businessId, memberId, permission, scopes)));
+      await admin.from("business_audit_log").insert({ business_id: businessId, actor_user_id: current.user.id, target_user_id: target.user_id, action: "member_permissions_updated", metadata: { permissions: selected, permission_scopes: scopes } });
       return json({ ok: true });
     }
     if (action === "status") {

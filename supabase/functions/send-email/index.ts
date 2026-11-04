@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { isServiceRoleAuthorized, isValidEmailAddress, resolveZeptoMailEndpoint, sendZeptoMail } from "../_shared/zeptomail.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8,21 +9,28 @@ const corsHeaders = {
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const ZEPTO_MAIL_API_KEY = Deno.env.get("ZEPTOMAIL_API_KEY") || "";
-const ZEPTO_MAIL_ENDPOINT = Deno.env.get("ZEPTO_MAIL_ENDPOINT") || "https://api.zeptomail.com/v1.1/email";
-const ZEPTO_MAIL_FROM = Deno.env.get("ZEPTO_MAIL_FROM") || "noreply@muwoyo.com";
+const ZEPTO_MAIL_ENDPOINT = Deno.env.get("ZEPTO_MAIL_ENDPOINT") || "https://cpaas.zoho.com/v1.1/email";
+const ZEPTO_MAIL_FROM = Deno.env.get("ZEPTO_MAIL_FROM")?.trim() || "";
 const ZEPTO_MAIL_FROM_NAME = Deno.env.get("ZEPTO_MAIL_FROM_NAME") || "MUWOYO";
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-type TemplateType = "otp" | "welcome" | "trial_start" | "trial_expired" | "low_credits" | "password_reset" | "payment_confirmed" | "plan_expiring";
+type TemplateType = "otp" | "welcome" | "trial_start" | "trial_expired" | "low_credits" | "password_reset" | "payment_confirmed" | "plan_expiring" | "delivery_test";
 type Body = { to?: { email: string; name?: string } | string; template_type?: TemplateType; template_data?: Record<string, unknown>; event_key?: string };
 
-const TEMPLATE_TYPES: TemplateType[] = ["otp", "welcome", "trial_start", "trial_expired", "low_credits", "password_reset", "payment_confirmed", "plan_expiring", "trial_expiring_1_day", "trial_last_day"];
+const TEMPLATE_TYPES: TemplateType[] = ["otp", "welcome", "trial_start", "trial_expired", "low_credits", "password_reset", "payment_confirmed", "plan_expiring", "trial_expiring_1_day", "trial_last_day", "delivery_test"];
 
-async function updateDispatchEvent(eventKey: string | undefined, processed: boolean, lastError: string | null) {
+async function updateDispatchEvent(eventKey: string | undefined, processed: boolean, lastError: string | null, correlationId: string) {
   if (!eventKey || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return;
-  const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-  const { error } = await admin.from("email_dispatch_events").update({ processed, last_error: lastError }).eq("event_key", eventKey);
-  if (error) console.error("Email dispatch status update failed", error.message);
+  try {
+    const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const { error } = await admin.from("email_dispatch_events").update({ processed, last_error: lastError }).eq("event_key", eventKey);
+    if (error) console.error("Email dispatch status update failed", { correlationId, error: error.message.slice(0, 300) });
+  } catch (error) {
+    console.error("Email dispatch status update failed", {
+      correlationId,
+      error: error instanceof Error ? error.name : "unknown_error",
+    });
+  }
 }
 
 function escapeHtml(value: unknown) {
@@ -30,8 +38,13 @@ function escapeHtml(value: unknown) {
 }
 
 function recipient(to: Body["to"]) {
-  if (typeof to === "string") return { email: to, name: to };
-  return { email: to?.email || "", name: to?.name || to?.email || "" };
+  if (typeof to === "string") {
+    const email = to.trim();
+    return { email, name: email };
+  }
+  const email = typeof to?.email === "string" ? to.email.trim() : "";
+  const name = typeof to?.name === "string" ? to.name.trim() : "";
+  return { email, name: name || email };
 }
 
 function renderTemplate(type: TemplateType, data: Record<string, unknown>) {
@@ -52,6 +65,7 @@ function renderTemplate(type: TemplateType, data: Record<string, unknown>) {
     plan_expiring: { subject: days === 0 ? "O seu plano Muwoyo expira hoje" : `O seu plano Muwoyo expira em ${days} dias`, title: days === 0 ? "O seu plano expira hoje" : `Faltam ${days} dias para a expiração`, body: `<p>Olá, ${name}.</p><p>O plano <strong>${planName}</strong> ${days === 0 ? "expira hoje" : `expira em ${days} dias`}${expiresAt ? `, no dia <strong>${escapeHtml(expiresAt)}</strong>` : ""}.</p><p>Renove o seu plano na área de faturação para manter o acesso às funcionalidades da Muwoyo.</p>` },
     trial_expiring_1_day: { subject: "O seu teste Muwoyo termina amanhã", title: "Falta 1 dia para terminar o teste", body: `<p>Olá, ${name}.</p><p>Falta 1 dia para terminar o seu teste gratuito. Escolha um plano para continuar a utilizar a Muwoyo.</p>` },
     trial_last_day: { subject: "O seu teste Muwoyo termina hoje", title: "Último dia de teste", body: `<p>Olá, ${name}.</p><p>Hoje é o último dia do seu teste gratuito. Escolha um plano para continuar a utilizar a Muwoyo.</p>` },
+    delivery_test: { subject: "Teste de envio de e-mail | Muwoyo", title: "Teste de envio concluído", body: `<p>Este é um e-mail de teste solicitado pela equipa Muwoyo.</p><p>Se recebeu esta mensagem, o serviço de envio de e-mails está a funcionar.</p>` },
   };
   const selected = content[type];
   return {
@@ -64,34 +78,74 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ success: false, error: "method_not_allowed" }, 405);
   const authorization = req.headers.get("Authorization");
-  if (!SUPABASE_SERVICE_ROLE_KEY || authorization !== `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`) return json({ success: false, error: "unauthorized" }, 401);
+  if (!isServiceRoleAuthorized(authorization, SUPABASE_SERVICE_ROLE_KEY)) return json({ success: false, error: "unauthorized" }, 401);
+  const requestCorrelationId = req.headers.get("x-correlation-id") || "";
+  const correlationId = /^[0-9a-f-]{36}$/i.test(requestCorrelationId) ? requestCorrelationId : crypto.randomUUID();
 
   try {
-    const body = await req.json() as Body;
+    let body: Body;
+    try {
+      body = await req.json() as Body;
+    } catch {
+      return json({ success: false, error: "invalid_payload", correlation_id: correlationId }, 400);
+    }
     const to = recipient(body.to);
-    if (!to.email || !body.template_type || !TEMPLATE_TYPES.includes(body.template_type)) {
-      await updateDispatchEvent(body.event_key, false, "invalid_payload");
+    if (!isValidEmailAddress(to.email) || !body.template_type || !TEMPLATE_TYPES.includes(body.template_type)) {
+      await updateDispatchEvent(body.event_key, false, "invalid_payload", correlationId);
       return json({ success: false, error: "invalid_payload" }, 400);
     }
-    if (!ZEPTO_MAIL_API_KEY) {
-      await updateDispatchEvent(body.event_key, false, "not_configured");
-      return json({ success: false, error: "not_configured" }, 503);
+    if (!ZEPTO_MAIL_API_KEY || !isValidEmailAddress(ZEPTO_MAIL_FROM)) {
+      console.error("Email sender configuration is incomplete", { correlationId });
+      await updateDispatchEvent(body.event_key, false, "not_configured", correlationId);
+      return json({ success: false, error: "not_configured", correlation_id: correlationId }, 503);
+    }
+    try {
+      resolveZeptoMailEndpoint(ZEPTO_MAIL_ENDPOINT);
+    } catch {
+      console.error("Email provider endpoint configuration is invalid", { correlationId });
+      await updateDispatchEvent(body.event_key, false, "not_configured", correlationId);
+      return json({ success: false, error: "not_configured", correlation_id: correlationId }, 503);
     }
     const template = renderTemplate(body.template_type, body.template_data || {});
-    const response = await fetch(ZEPTO_MAIL_ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Zoho-enczapikey ${ZEPTO_MAIL_API_KEY}` },
-      body: JSON.stringify({ from: { address: ZEPTO_MAIL_FROM, name: ZEPTO_MAIL_FROM_NAME }, to: [{ email_address: { address: to.email, name: to.name } }], subject: template.subject, htmlbody: template.htmlbody }),
+    const result = await sendZeptoMail({
+      endpoint: ZEPTO_MAIL_ENDPOINT,
+      apiKey: ZEPTO_MAIL_API_KEY,
+      correlationId,
+      sensitiveValues: [to.email, String(body.template_data?.code || "")],
+      payload: {
+        from: { address: ZEPTO_MAIL_FROM, name: ZEPTO_MAIL_FROM_NAME },
+        to: [{ email_address: { address: to.email, name: to.name } }],
+        subject: template.subject,
+        htmlbody: template.htmlbody,
+      },
     });
-    if (!response.ok) {
-      console.error("ZeptoMail error", response.status);
-      await updateDispatchEvent(body.event_key, false, `provider_error:${response.status}`);
-      return json({ success: false, error: "provider_error" }, 502);
+    if (!result.ok) {
+      console.error("ZeptoMail error", {
+        correlationId,
+        status: result.status,
+        attempts: result.attempts,
+        retryable: result.retryable,
+        responseKind: result.responseKind,
+        detail: result.detail,
+      });
+      await updateDispatchEvent(body.event_key, false, `provider_error:${result.status}`, correlationId);
+      return json({
+        success: false,
+        error: result.retryable ? "provider_temporary_error" : "provider_rejected",
+        correlation_id: correlationId,
+      }, result.retryable ? 503 : 502);
     }
-    await updateDispatchEvent(body.event_key, true, null);
-    return json({ success: true });
+    await updateDispatchEvent(body.event_key, true, null, correlationId);
+    return json({ success: true, correlation_id: correlationId });
   } catch (error) {
-    console.error("send-email error", error);
-    return json({ success: false, error: "temporary_error" }, 500);
+    console.error("send-email error", {
+      correlationId,
+      error: error instanceof Error ? error.name : "unknown_error",
+      detail: (error instanceof Error ? error.message : "unexpected_error")
+        .split(ZEPTO_MAIL_API_KEY || "\u0000").join("[redacted]")
+        .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[redacted-email]")
+        .slice(0, 500),
+    });
+    return json({ success: false, error: "temporary_error", correlation_id: correlationId }, 500);
   }
 });

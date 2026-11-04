@@ -44,14 +44,38 @@ const evoFetch = async (path: string, init: RequestInit = {}) => {
 
 const extractState = (p: any) => p?.instance?.state || p?.state || p?.connectionStatus || null;
 const mapState = (s: string | null | undefined) => (s === "open" ? "open" : s === "connecting" ? "connecting" : "disconnected");
+const isRemoteInstanceMissing = (status: number, data: unknown) =>
+  status === 404 || /instance.{0,30}(not found|does not exist|not exist)/i.test(JSON.stringify(data || ""));
 const extractQrBase64 = (p: any) => p?.qrcode?.base64 || p?.base64 || p?.qr?.base64 || null;
 const extractQrText = (p: any) => p?.qrcode?.code || p?.code || p?.qr?.code || null;
 const extractPairingCode = (p: any) => p?.pairingCode || p?.code || p?.pairing?.code || null;
 
 // Get existing instance_name from supabase (do NOT auto-create)
-const getStoredInstanceName = async (admin: ReturnType<typeof createClient>, userId: string) => {
-  const { data: row } = await admin.from("instances").select("instance_name").eq("user_id", userId).maybeSingle();
-  return (row?.instance_name as string | undefined) || null;
+const getStoredInstanceName = async (
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  requestedInstanceName: string | null,
+) => {
+  if (requestedInstanceName) {
+    const { data: requested, error } = await admin
+      .from("instances")
+      .select("instance_name")
+      .eq("user_id", userId)
+      .eq("instance_name", requestedInstanceName)
+      .maybeSingle();
+    if (error) throw error;
+    if (requested?.instance_name) return requested.instance_name as string;
+    return null;
+  }
+
+  const { data: rows, error } = await admin
+    .from("instances")
+    .select("instance_name")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  return rows?.[0]?.instance_name as string | undefined;
 };
 
 const startTrialIfNeeded = async (admin: ReturnType<typeof createClient>, userId: string) => {
@@ -68,7 +92,7 @@ const saveInstance = async (
 ) => {
   const { error } = await admin.from("instances").upsert(
     { user_id: userId, instance_name: instanceName, ...patch },
-    { onConflict: "user_id" },
+    { onConflict: "user_id,instance_name" },
   );
   if (error) throw error;
 };
@@ -76,7 +100,20 @@ const saveInstance = async (
 // CHECK DIRECTLY ON EVOLUTION (do NOT trust supabase)
 const checkEvolutionInstanceExists = async (instanceName: string) => {
   const fetched = await evoFetch(`/instance/fetchInstances?instanceName=${encodeURIComponent(instanceName)}`);
-  const arr = Array.isArray(fetched.data) ? fetched.data : (fetched.data ? [fetched.data] : []);
+  if (!fetched.ok && fetched.status === 404) {
+    return { exists: false, state: null, raw: null };
+  }
+  if (!fetched.ok) {
+    throw new Error(`evolution_instance_status_unavailable:${fetched.status || "network_error"}`);
+  }
+  const arr: any[] | null = Array.isArray(fetched.data)
+    ? fetched.data
+    : Array.isArray(fetched.data?.instances)
+      ? fetched.data.instances
+      : fetched.data && (fetched.data?.name || fetched.data?.instance?.instanceName || fetched.data?.instanceName)
+        ? [fetched.data]
+        : null;
+  if (!arr) throw new Error("evolution_instance_status_invalid_response");
   const found = arr.find((i: any) => {
     const n = i?.name || i?.instance?.instanceName || i?.instanceName;
     return n === instanceName;
@@ -86,6 +123,74 @@ const checkEvolutionInstanceExists = async (instanceName: string) => {
     return { exists: true, state, raw: found };
   }
   return { exists: false, state: null, raw: null };
+};
+
+const updateInstanceStateIfChanged = async (
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  instanceName: string,
+  patch: Record<string, unknown>,
+) => {
+  const { data: current, error: lookupError } = await admin.from("instances")
+    .select("id,connection_state,evolution_state,status,automation_paused,automation_paused_until,disconnected_at,phone,phone_number,qr_code")
+    .eq("user_id", userId)
+    .eq("instance_name", instanceName)
+    .maybeSingle();
+  if (lookupError) throw lookupError;
+  if (!current) throw new Error("stored_instance_not_found");
+  if (patch.status === "disconnected" && current.status === "disconnected") {
+    patch.disconnected_at = current.disconnected_at;
+  }
+  const changed = Object.entries(patch).some(([key, value]) => current[key as keyof typeof current] !== value);
+  if (!changed) return false;
+  const { error } = await admin.from("instances").update(patch).eq("id", current.id);
+  if (error) throw error;
+  return true;
+};
+
+const reconcileAllInstances = async (admin: ReturnType<typeof createClient>) => {
+  const response = await evoFetch("/instance/fetchInstances");
+  if (!response.ok) return { error: "evolution_instance_list_unavailable", status: response.status };
+  const remoteInstances = Array.isArray(response.data)
+    ? response.data
+    : Array.isArray(response.data?.instances)
+      ? response.data.instances
+      : null;
+  if (!remoteInstances) return { error: "invalid_evolution_instance_list", status: 502 };
+
+  const { data: localInstances, error } = await admin.from("instances")
+    .select("id,user_id,instance_name,connection_state,evolution_state,status,automation_paused,automation_paused_until,disconnected_at,phone,phone_number,qr_code");
+  if (error) throw error;
+  const remoteByName = new Map<string, any>();
+  for (const remote of remoteInstances) {
+    const name = remote?.name || remote?.instance?.instanceName || remote?.instanceName;
+    if (typeof name === "string") remoteByName.set(name, remote);
+  }
+
+  let connected = 0;
+  let disconnected = 0;
+  for (const local of localInstances || []) {
+    const remote = remoteByName.get(local.instance_name);
+    const state = remote ? extractState(remote) || "close" : "close";
+    const mapped = mapState(state);
+    const isConnected = mapped === "open";
+    const patch = {
+      connection_state: mapped,
+      evolution_state: state,
+      status: isConnected ? "connected" : mapped === "connecting" ? "connecting" : "disconnected",
+      ...(isConnected ? { disconnected_at: null } : { disconnected_at: local.disconnected_at || new Date().toISOString() }),
+      ...(!isConnected ? { automation_paused: false, automation_paused_until: null } : {}),
+      ...(!remote ? { phone: null, phone_number: null, qr_code: null } : {}),
+    };
+    const changed = Object.entries(patch).some(([key, value]) => local[key as keyof typeof local] !== value);
+    if (changed) {
+      const { error: updateError } = await admin.from("instances").update(patch).eq("id", local.id);
+      if (updateError) throw updateError;
+    }
+    if (isConnected) connected += 1;
+    else disconnected += 1;
+  }
+  return { ok: true, checked: localInstances?.length || 0, connected, disconnected };
 };
 
 const createEvolutionInstance = async (instanceName: string, phone?: string) => {
@@ -99,12 +204,11 @@ const createEvolutionInstance = async (instanceName: string, phone?: string) => 
       webhook: {
         enabled: true,
         url: WEBHOOK_URL,
-        byEvents: false,
-        base64: true,
+        webhookByEvents: false,
+        webhookBase64: true,
         events: [
           "CONNECTION_UPDATE",
           "QRCODE_UPDATED",
-          "MESSAGES_SET",
           "MESSAGES_UPSERT",
           "MESSAGES_UPDATE",
           "MESSAGES_DELETE",
@@ -155,10 +259,25 @@ Deno.serve(async (req) => {
 
     if (!normalizedAction) return json({ error: "missing_action" }, 400);
 
+    if (normalizedAction === "reconcileAllInstances") {
+      const [{ data: isPrimaryAdmin, error: adminError }, { data: roles, error: rolesError }] = await Promise.all([
+        admin.rpc("is_admin", { _user_id: userId }),
+        admin.from("user_roles").select("role").eq("user_id", userId),
+      ]);
+      if (adminError || rolesError) return json({ error: "admin_authorization_check_failed" }, 500);
+      if (!isPrimaryAdmin && !roles?.some((row: { role: string }) => row.role === "sub_admin")) {
+        return json({ error: "admin_required" }, 403);
+      }
+      const result = await reconcileAllInstances(admin);
+      return json(result, "ok" in result && result.ok ? 200 : result.status || 502);
+    }
+
     // The stored instance is authoritative after the first connection.
-    const storedInstanceName = await getStoredInstanceName(admin, userId);
-    const instanceName = storedInstanceName || requestedInstanceName;
+    const storedInstanceName = await getStoredInstanceName(admin, userId, requestedInstanceName);
+    const mayCreateInstance = normalizedAction === "createAndConnect" || normalizedAction === "getPairingCode";
+    const instanceName = storedInstanceName || (mayCreateInstance ? requestedInstanceName : null);
     if (!instanceName) {
+      if (requestedInstanceName) return json({ error: "whatsapp_instance_not_found" }, 404);
       return json({ error: "instance_name_required", message: "Frontend deve enviar instanceName" }, 400);
     }
 
@@ -171,6 +290,7 @@ Deno.serve(async (req) => {
       // STEP 1: Check directly on Evolution if instance exists
       let check = await checkEvolutionInstanceExists(instanceName);
       console.log(`[connect] step1 evolution exists=${check.exists} state=${check.state}`);
+      if (!storedInstanceName && check.exists) return json({ error: "instance_name_already_in_use" }, 409);
 
       // STEP 2: If not, create it on Evolution
       if (!check.exists) {
@@ -279,6 +399,7 @@ Deno.serve(async (req) => {
       if (!phone) return json({ error: "phone_required" }, 400);
 
       let check = await checkEvolutionInstanceExists(instanceName);
+      if (!storedInstanceName && check.exists) return json({ error: "instance_name_already_in_use" }, 409);
       if (!check.exists) {
         const created = await createEvolutionInstance(instanceName, phone);
         if (!created.ok && created.status !== 201 && created.status !== 200 && created.status !== 403) {
@@ -328,18 +449,31 @@ Deno.serve(async (req) => {
     if (normalizedAction === "getStatus") {
       const check = await checkEvolutionInstanceExists(instanceName);
       if (!check.exists) {
-        await saveInstance(admin, userId, instanceName, {
-          connection_state: "disconnected", evolution_state: "close", status: "disconnected",
+        await updateInstanceStateIfChanged(admin, userId, instanceName, {
+          connection_state: "disconnected",
+          evolution_state: "close",
+          status: "disconnected",
+          disconnected_at: new Date().toISOString(),
+          automation_paused: false,
+          automation_paused_until: null,
+          phone: null,
+          phone_number: null,
+          qr_code: null,
         });
-        return json({ instanceName, state: "disconnected", raw: "close", exists: false });
+        return json({ instanceName, state: "disconnected", raw: "close", exists: false, deleted: true });
       }
       const raw = check.state || "close";
       const state = mapState(raw);
-      await saveInstance(admin, userId, instanceName, {
+      const stateChanged = await updateInstanceStateIfChanged(admin, userId, instanceName, {
         connection_state: state, evolution_state: raw,
         status: state === "open" ? "connected" : state === "connecting" ? "connecting" : "disconnected",
+        disconnected_at: state === "open" ? null : new Date().toISOString(),
+        ...(state === "open" ? {} : { automation_paused: false, automation_paused_until: null }),
       });
-      if (state === "open") await startTrialIfNeeded(admin, userId);
+      if (state === "open") {
+        await startTrialIfNeeded(admin, userId);
+        if (stateChanged) await triggerInboxSync(userId, instanceName);
+      }
       return json({ instanceName, state, raw, exists: true });
     }
 
@@ -361,19 +495,22 @@ Deno.serve(async (req) => {
 
     // IMPORT CONTACTS FROM EVOLUTION (skip groups)
     if (normalizedAction === "importContacts") {
-      const r = await evoFetch(`/chat/findContacts/${instanceName}`, { method: "POST", body: JSON.stringify({ where: {} }) });
-      const list: any[] = Array.isArray(r.data) ? r.data : (r.data?.contacts || []);
+      const r = await evoFetch(`/chat/findContacts/${encodeURIComponent(instanceName)}`, { method: "POST", body: JSON.stringify({ where: {} }) });
+      if (!r.ok) return json({ error: "whatsapp_contact_fetch_failed", status: r.status }, 502);
+      const list: any[] | null = Array.isArray(r.data) ? r.data : (Array.isArray(r.data?.contacts) ? r.data.contacts : null);
+      if (!list) return json({ error: "invalid_contact_response" }, 502);
       let imported = 0;
       for (const c of list) {
         const jid: string = c?.id || c?.remoteJid || c?.jid || "";
         if (!jid || !jid.endsWith("@s.whatsapp.net")) continue;
         const phone = jid.split("@")[0]?.replace(/\D/g, "");
-        if (!phone || !/^[1-9][0-9]{7,14}$/.test(phone) || phone.includes("-")) continue;
+        if (!phone || !/^[1-9][0-9]{7,14}$/.test(phone)) continue;
         const name = c?.pushName || c?.name || c?.notify || c?.verifiedBizName || null;
-        await admin.from("whatsapp_contacts").upsert(
-          { user_id: userId, instance_name: instanceName, phone_number: phone, name },
+        const { error } = await admin.from("whatsapp_contacts").upsert(
+          { user_id: userId, instance_name: instanceName, remote_jid: jid, is_group: false, phone_number: phone, ...(name ? { name } : {}) },
           { onConflict: "user_id,instance_name,phone_number" },
         );
+        if (error) throw error;
         imported++;
       }
       return json({ ok: true, imported });
@@ -417,14 +554,51 @@ Deno.serve(async (req) => {
     // DISCONNECT
     // ============================================================
     if (normalizedAction === "disconnect") {
-      const logout = await evoFetch(`/instance/logout/${encodeURIComponent(instanceName)}`, { method: "DELETE" });
-      if (!logout.ok && logout.status !== 404) {
-        return json({ error: "whatsapp_disconnect_failed", details: logout.data }, 502);
+      const remote = await checkEvolutionInstanceExists(instanceName);
+      if (!remote.exists) {
+        const { error } = await admin.from("instances").delete()
+          .eq("user_id", userId)
+          .eq("instance_name", instanceName);
+        if (error) throw error;
+        return json({ ok: true, remoteAlreadyDeleted: true, exists: false });
       }
-      await saveInstance(admin, userId, instanceName, {
-        connection_state: "disconnected", evolution_state: "close", status: "disconnected", qr_code: null,
+
+      const remoteState = mapState(remote.state);
+      if (remoteState === "disconnected") {
+        await updateInstanceStateIfChanged(admin, userId, instanceName, {
+          connection_state: "disconnected",
+          evolution_state: remote.state || "close",
+          status: "disconnected",
+          disconnected_at: new Date().toISOString(),
+          automation_paused: false,
+          automation_paused_until: null,
+          qr_code: null,
+        });
+        return json({ ok: true, remoteAlreadyDisconnected: true, exists: true, state: remote.state || "close" });
+      }
+
+      const logout = await evoFetch(`/instance/logout/${encodeURIComponent(instanceName)}`, { method: "DELETE" });
+      const alreadyMissing = !logout.ok && isRemoteInstanceMissing(logout.status, logout.data);
+      if (!logout.ok && !alreadyMissing) {
+        return json({ error: "whatsapp_disconnect_failed", status: logout.status, details: logout.data }, 502);
+      }
+      if (alreadyMissing) {
+        const { error } = await admin.from("instances").delete()
+          .eq("user_id", userId)
+          .eq("instance_name", instanceName);
+        if (error) throw error;
+        return json({ ok: true, remoteAlreadyDeleted: true, exists: false });
+      }
+      await updateInstanceStateIfChanged(admin, userId, instanceName, {
+        connection_state: "disconnected",
+        evolution_state: "close",
+        status: "disconnected",
+        disconnected_at: new Date().toISOString(),
+        automation_paused: false,
+        automation_paused_until: null,
+        qr_code: null,
       });
-      return json({ ok: true, remoteAlreadyDisconnected: logout.status === 404 });
+      return json({ ok: true, exists: true, state: "close" });
     }
 
     // ============================================================
@@ -437,6 +611,8 @@ Deno.serve(async (req) => {
       if (!removed.ok && removed.status !== 404) return json({ error: "whatsapp_delete_failed", details: removed.data }, 502);
       await saveInstance(admin, userId, instanceName, {
         connection_state: "disconnected", evolution_state: "close", status: "disconnected",
+        disconnected_at: new Date().toISOString(),
+        automation_paused: false, automation_paused_until: null,
         phone: null, phone_number: null, qr_code: null,
       });
       return json({ ok: true, remoteAlreadyDeleted: removed.status === 404 });

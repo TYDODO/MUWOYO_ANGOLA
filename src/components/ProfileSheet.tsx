@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { resendVerificationCode } from "@/lib/email-verification";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, LogOut, Pencil, Check, X, Camera } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -66,10 +67,19 @@ export default function ProfileSheet({
         if (error) err = error.message;
         else {
           window.sessionStorage.setItem("muwoyo_pending_email", nextEmail);
-          await supabase.functions.invoke("send-verification-code", { body: { email: nextEmail } });
+          const verification = await resendVerificationCode(nextEmail);
           setEditing(null);
           setOpen(false);
           navigate("/confirmar-email", { replace: true, state: { email: nextEmail, emailChange: true } });
+          if ("error" in verification) {
+            toast({
+              title: "Não foi possível enviar o código",
+              description: verification.error === "resend_cooldown"
+                ? "Aguarde alguns segundos antes de solicitar outro código."
+                : "O seu e-mail foi atualizado. Pode tentar reenviar o código na página de confirmação.",
+              variant: "destructive",
+            });
+          }
           setSaving(false);
           return;
         }

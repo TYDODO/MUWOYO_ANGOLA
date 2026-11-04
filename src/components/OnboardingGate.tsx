@@ -10,6 +10,7 @@ import BusinessHoursConfig from "@/components/BusinessHoursConfig";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useRole } from "@/hooks/useRole";
+import { useBusinessMembership } from "@/hooks/useBusinessMembership";
 import { LegalAcceptance } from "@/components/LegalAcceptance";
 import logo from "@/assets/muwoyo-logo.png";
 import { useToast } from "@/hooks/use-toast";
@@ -93,6 +94,7 @@ export default function OnboardingGate({
 }) {
   const { user } = useAuth();
   const { role, loading: roleLoading } = useRole();
+  const { membership, loading: membershipLoading } = useBusinessMembership();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [done, setDone] = useState(true);
@@ -164,7 +166,7 @@ export default function OnboardingGate({
     window.localStorage.setItem(`muwoyo-onboarding-state-${user.id}`, JSON.stringify({ step, legal: showLegalAcceptance }));
   }, [user, stateLoaded, done, step, showLegalAcceptance]);
 
-  if (roleLoading || loading)
+  if (roleLoading || membershipLoading || loading)
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -172,6 +174,7 @@ export default function OnboardingGate({
     );
   if (role === "admin") return <Navigate to="/admin" replace />;
   if (role === "sub_admin") return <Navigate to="/gestor" replace />;
+  if (membership?.role === "attendant") return <>{children}</>;
   if (done) return <>{children}</>;
 
   // Show legal acceptance after form completion

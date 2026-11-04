@@ -74,6 +74,8 @@ export default function Dashboard() {
           "instance_name, connection_state, phone, phone_number, automation_paused, automation_paused_until, status",
         )
         .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
         .maybeSingle(),
       supabase
         .from("profiles")
@@ -87,7 +89,7 @@ export default function Dashboard() {
         .eq("direction", "inbound")
         .gte("created_at", start.toISOString()),
     ]);
-    setInstance((inst as any) ?? null);
+    setInstance(inst ? { ...inst } : null);
     if (prof) {
       setMessagesReceived(prof.messages_received ?? 0);
       setMessageLimit(prof.message_limit ?? 0);
@@ -103,25 +105,87 @@ export default function Dashboard() {
     loadAll();
   }, [loadAll]);
 
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    const refreshInstance = async (checkEvolution = false) => {
+      const { data, error } = await supabase
+        .from("instances")
+        .select("instance_name, connection_state, phone, phone_number, automation_paused, automation_paused_until, status")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error || !active) return;
+      const row = (data as InstanceRow | null) ?? null;
+      setInstance(row);
+      if (!checkEvolution || !row?.instance_name) return;
+      const { data: status, error: statusError } = await supabase.functions.invoke("evolution-api", {
+        body: { action: "getStatus", instanceName: row.instance_name },
+      });
+      if (!active || statusError || !status || typeof status.state !== "string") return;
+      setInstance((current) => current?.instance_name === row.instance_name
+        ? {
+          ...current,
+          connection_state: status.state,
+          status: status.state === "open" ? "connected" : status.state === "connecting" ? "connecting" : "disconnected",
+          ...(status.deleted ? { phone: null, phone_number: null, automation_paused: false, automation_paused_until: null } : {}),
+        }
+        : current);
+    };
+    const channel = supabase
+      .channel(`dashboard-instance-${user.id}`)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "instances",
+        filter: `user_id=eq.${user.id}`,
+      }, () => void refreshInstance())
+      .subscribe();
+    void refreshInstance(true);
+    const interval = window.setInterval(() => void refreshInstance(true), 20000);
+    const handleFocus = () => void refreshInstance(true);
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+      void supabase.removeChannel(channel);
+    };
+  }, [user]);
+
   const handleDisconnect = async () => {
     setDisconnecting(true);
     try {
-      const { error } = await supabase.functions.invoke("evolution-api", {
-        body: { action: "disconnect" },
+      const { data, error } = await supabase.functions.invoke("evolution-api", {
+        body: { action: "disconnect", instanceName: instance?.instance_name },
       });
       setDisconnecting(false);
-      if (error) {
-        const context = error.context;
+      if (error || data?.error) {
+        const context = error?.context;
         const responseBody = context instanceof Response ? await context.clone().json().catch(() => null) : null;
-        const description = responseBody?.message || responseBody?.error || error.message;
-        console.warn("Function evolution-api not available:", error.message);
+        const description = responseBody?.message || responseBody?.error || data?.error || error?.message || "A Evolution não confirmou a desconexão.";
+        console.warn("Function evolution-api disconnect failed:", description);
         return toast({
           title: "Erro",
           description,
           variant: "destructive",
         });
       }
-      toast({ title: "Desconectado" });
+      if (data?.remoteAlreadyDeleted) {
+        setInstance(null);
+      } else {
+        setInstance((current) => current
+          ? {
+            ...current,
+            connection_state: "disconnected",
+            status: "disconnected",
+            automation_paused: false,
+            automation_paused_until: null,
+          }
+          : current);
+      }
+      toast({ title: data?.remoteAlreadyDeleted ? "Instância removida" : "Desconectado" });
       loadAll();
     } catch (error) {
       setDisconnecting(false);
@@ -137,13 +201,14 @@ export default function Dashboard() {
   const setPause = async (paused: boolean, untilMinutes?: number) => {
     if (!user) return;
     setSavingPause(true);
-    const patch: any = { automation_paused: paused };
-    patch.automation_paused_until = untilMinutes
-      ? new Date(Date.now() + untilMinutes * 60000).toISOString()
-      : null;
     const { error } = await supabase
       .from("instances")
-      .update(patch)
+      .update({
+        automation_paused: paused,
+        automation_paused_until: untilMinutes
+          ? new Date(Date.now() + untilMinutes * 60000).toISOString()
+          : null,
+      })
       .eq("user_id", user.id);
     setSavingPause(false);
     if (error)

@@ -1,48 +1,69 @@
-import { useEffect, useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
+import { useCallback, useEffect, useState, type FormEvent, type MouseEvent } from "react";
 import { Button } from "@/components/ui/button";
-import { CircleCheck, Info } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import logo from "@/assets/muwoyo-logo.png";
+import { useBusinessMembership } from "@/hooks/useBusinessMembership";
+import { useDeliveryPerson } from "@/hooks/useDeliveryPerson";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-/**
- * Wraps protected pages and shows a blocking modal when the user has 0 messages remaining.
- * Cannot be dismissed only resolves when credits are recharged (via admin action or future payment flow).
- */
+type GateReason = "trial" | "plan" | "credits";
+
 export default function CreditGate({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const { user } = useAuth();
+  const { membership } = useBusinessMembership();
+  const { deliveryPerson } = useDeliveryPerson();
   const navigate = useNavigate();
-  const [blocked, setBlocked] = useState(false);
-  const [accountStatus, setAccountStatus] = useState("active");
-  const [checked, setChecked] = useState(false);
+  const [reason, setReason] = useState<GateReason | null>(null);
+  const [open, setOpen] = useState(false);
 
-  const check = async () => {
-    if (!user) return;
-    const { data } = await supabase
-      .from("profiles")
-      .select("messages_received, message_limit, onboarding_completed, account_status")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    if (!data?.onboarding_completed) {
-      setChecked(true);
+  const check = useCallback(async () => {
+    if (!user || membership?.role === "attendant" || deliveryPerson?.status === "active") {
+      setReason(null);
+      setOpen(false);
       return;
     }
+    const { data } = await supabase
+      .from("profiles")
+      .select("messages_received,message_limit,onboarding_completed,account_status,trial_expires_at,subscription_expires_at")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!data?.onboarding_completed) return;
+    const now = Date.now();
     const remaining =
       Number(data?.message_limit || 0) - Number(data?.messages_received || 0);
-    setAccountStatus(data?.account_status || "active");
-    setBlocked(
-      data?.account_status === "inactive" ||
-        (remaining <= 0 &&
-          Number(data?.message_limit || 0) > 0 &&
-          ["active", "trial"].includes(data?.account_status || "")),
-    );
-    setChecked(true);
+    const trialExpired = Boolean(data.trial_expires_at && new Date(data.trial_expires_at).getTime() <= now && (data.account_status === "trial" || (data.account_status === "inactive" && !data.subscription_expires_at)));
+    const planExpired = Boolean(data.subscription_expires_at && new Date(data.subscription_expires_at).getTime() <= now);
+    const inactive = data.account_status === "inactive";
+    const creditsExhausted = remaining <= 0 && Number(data.message_limit || 0) > 0 && ["active", "trial"].includes(data.account_status || "");
+    const nextReason = trialExpired ? "trial" : planExpired || (inactive && !data.trial_expires_at) ? "plan" : creditsExhausted ? "credits" : null;
+    setReason(nextReason);
+    if (!nextReason) setOpen(false);
+  }, [deliveryPerson?.status, membership?.role, user]);
+
+  const isRenewalRoute = () => window.location.pathname === "/recargas";
+
+  const guardActionClick = (event: MouseEvent<HTMLDivElement>) => {
+    if (!reason || isRenewalRoute() || !(event.target instanceof Element)) return;
+    const button = event.target.closest("button");
+    if (!button || button.closest("nav,a,[role='combobox'],[role='tablist'],[data-allow-expired]")) return;
+    if (button.hasAttribute("aria-haspopup") || button.getAttribute("aria-expanded") === "true") return;
+    const label = `${button.innerText || ""} ${button.getAttribute("aria-label") || ""} ${button.title || ""}`;
+    if (!/\b(guardar|salvar|enviar|criar|adicionar|remover|eliminar|apagar|confirmar|ativar|suspender|pausar|publicar|agendar|executar|comprar|assinar|pagar|concluir|desconectar)\b/i.test(label)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setOpen(true);
+  };
+
+  const guardFormSubmit = (event: FormEvent<HTMLDivElement>) => {
+    if (!reason || isRenewalRoute() || !(event.target instanceof HTMLFormElement) || event.target.hasAttribute("data-allow-expired")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setOpen(true);
   };
 
   useEffect(() => {
@@ -64,38 +85,23 @@ export default function CreditGate({
     return () => {
       supabase.removeChannel(ch);
     };
-  }, [user]);
+  }, [check, user]);
 
-  if (!checked) return <>{children}</>;
   return (
-    <>
+    <div onClickCapture={guardActionClick} onSubmitCapture={guardFormSubmit}>
       {children}
-      {blocked && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/95 backdrop-blur p-4">
-          <Card className="w-full max-w-md border-border/70 bg-card shadow-xl">
-            <CardContent className="space-y-5 p-7 text-center">
-              <img
-                src={logo}
-                alt="Muwoyo"
-                className="mx-auto h-14 w-14 object-contain"
-              />
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-                {accountStatus === "trial" ? <Info className="h-6 w-6" /> : <CircleCheck className="h-6 w-6" />}
-              </div>
-              <h2 className="text-xl font-bold">{["trial", "inactive"].includes(accountStatus) ? "O seu período de teste terminou" : "O saldo da conta terminou"}</h2>
-                <p className="text-sm leading-6 text-muted-foreground">{["trial", "inactive"].includes(accountStatus) ? "O período de teste terminou. Escolha um plano mensal para continuar a utilizar a automação." : "O saldo atual foi utilizado. Verifique o seu plano ou contacte o suporte."}</p>
-              <Button
-                className="w-full"
-                size="lg"
-                onClick={() => navigate("/recargas")}
-              >
-                  {["trial", "inactive"].includes(accountStatus) ? "Escolher plano" : "Ver planos"}
-              </Button>
-              <p className="text-xs text-muted-foreground">Assim que a ativação for confirmada, o acesso volta ao normal.</p>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-    </>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{reason === "trial" ? "O seu período de teste esgotou" : reason === "plan" ? "A validade do seu plano esgotou" : "Os seus créditos esgotaram"}</DialogTitle>
+            <DialogDescription>{reason === "credits" ? "Assine ou renove um plano para continuar a executar ações na plataforma." : "Assine um plano para continuar a usar as funcionalidades da plataforma. Pode continuar a navegar pelas secções."}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>Continuar a navegar</Button>
+            <Button onClick={() => { setOpen(false); navigate("/recargas"); }}>Ver planos</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

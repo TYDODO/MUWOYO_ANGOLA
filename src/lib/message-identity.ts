@@ -1,6 +1,37 @@
 export type MessageDirection = "inbound" | "outbound";
 export type MessageDeliveryStatus = "pending" | "received" | "sent" | "delivered" | "read" | "failed";
 
+export function isEvolutionMessageFromMe(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const message = value as Record<string, unknown>;
+  const nested = [message.data, message.message]
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry && typeof entry === "object"));
+  const candidates = [message, ...nested].flatMap((entry) => {
+    const key = entry.key && typeof entry.key === "object"
+      ? entry.key as Record<string, unknown>
+      : {};
+    return [key.fromMe, entry.fromMe, entry.from_me];
+  });
+  return candidates.some((candidate) =>
+    candidate === true
+    || candidate === 1
+    || typeof candidate === "string" && ["true", "1"].includes(candidate.trim().toLowerCase()),
+  );
+}
+
+export function extractEvolutionMessageId(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const response = value as Record<string, unknown>;
+  const data = response.data && typeof response.data === "object" ? response.data as Record<string, unknown> : {};
+  const message = response.message && typeof response.message === "object" ? response.message as Record<string, unknown> : {};
+  const nestedMessage = data.message && typeof data.message === "object" ? data.message as Record<string, unknown> : {};
+  const keys = [response.key, data.key, message.key, nestedMessage.key]
+    .filter((key): key is Record<string, unknown> => Boolean(key && typeof key === "object"));
+  const candidates = [...keys.map((key) => key.id), response.id, data.id];
+  const id = candidates.find((candidate) => typeof candidate === "string" && candidate.trim());
+  return typeof id === "string" ? id : null;
+}
+
 export function resolveMessageDirection(fromMe?: boolean | null): MessageDirection {
   return fromMe ? "outbound" : "inbound";
 }

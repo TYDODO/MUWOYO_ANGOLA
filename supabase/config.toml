@@ -33,6 +33,12 @@ verify_jwt = false
 [functions.inbox-sync]
 verify_jwt = false
 
+[functions.whatsapp-contact-profiles]
+verify_jwt = false
+
+[functions.inbox-send]
+verify_jwt = false
+
 [functions.inbox-actions]
 verify_jwt = false
 
@@ -40,4 +46,7 @@ verify_jwt = false
 verify_jwt = true
 
 [functions.team-members]
+verify_jwt = false
+
+[functions.delivery-management]
 verify_jwt = false

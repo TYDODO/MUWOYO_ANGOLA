@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { extractEvolutionMessageId } from "../../../src/lib/message-identity.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -181,6 +182,10 @@ Deno.serve(async (req) => {
       return json({ error: "whatsapp_send_failed", details: sent?.data || null }, 502);
     }
 
+    const externalMessageId = extractEvolutionMessageId(sent.data);
+    let databaseMessageId: string | null = null;
+    const remoteJid = String(targetContact?.remote_jid || `${targetPhone}@s.whatsapp.net`);
+
     if (kind === "reaction") {
       const targetExternalId = String(body?.messageKey?.id || "");
       if (targetExternalId) {
@@ -204,7 +209,7 @@ Deno.serve(async (req) => {
         }
       }
     } else {
-      await admin.from("messages").insert({
+      const { data: savedMessage, error: savedMessageError } = await admin.from("messages").insert({
         user_id: userId,
         phone_number: targetPhone,
         message_text: (text || (kind !== "text" ? String(body?.caption || "") : "")).slice(0, 4000),
@@ -218,17 +223,29 @@ Deno.serve(async (req) => {
         media_metadata: { caption: body?.caption || null, name: body?.fileName || null },
         delivery_status: "sent",
         whatsapp_instance_id: instanceName,
-        external_id: sent.data?.key?.id || null,
+        external_id: externalMessageId,
         from_me: true,
         is_historical: false,
         sent_at: new Date().toISOString(),
-      });
+      }).select("id").single();
+      if (savedMessageError) return json({ error: "message_save_failed", details: savedMessageError.message }, 500);
+      databaseMessageId = savedMessage?.id || null;
     }
     await admin.from("n8n_chat_histories").insert({
       user_id: userId,
       phone_number: targetPhone,
       session_id: `${userId}_${targetPhone}`,
-      message: { type: "human", data: { content: text || String(body?.caption || ""), kind, media_url: body?.mediaUrl || null } },
+      message: { type: "human", data: {
+        content: text || String(body?.caption || ""),
+        kind,
+        media_url: body?.mediaUrl || null,
+        message_id: externalMessageId,
+        external_id: externalMessageId,
+        external_message_id: externalMessageId,
+        database_message_id: databaseMessageId,
+        remote_jid: remoteJid,
+        message_key: { id: externalMessageId, remoteJid, fromMe: true },
+      } },
     });
 
     return json({ ok: true, data: sent.data });

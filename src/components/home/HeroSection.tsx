@@ -148,16 +148,12 @@ export default function HeroSection() {
       <div className="container mx-auto px-4 sm:px-6 grid lg:grid-cols-2 gap-8 items-start">
         {/* TEXTO */}
         <div className="space-y-6 sm:space-y-8 animate-fade-up lg:mt-24">
-          <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold text-slate-950 leading-[1.1] tracking-tight">
-            Automatize o atendimento e as vendas da sua empresa pelo{" "}
-            <span className="text-emerald-500">WhatsApp</span>
+          <h1 className="text-2xl font-extrabold leading-[1.1] tracking-tight text-slate-950 sm:text-3xl md:text-4xl lg:text-5xl">
+            Do primeiro contacto à entrega. Toda a sua operação comercial num só lugar.
           </h1>
 
           <p className="text-base sm:text-lg text-slate-600 max-w-2xl leading-relaxed">
-            Transforme o seu WhatsApp num canal inteligente que atende clientes,
-            apresenta produtos, qualifica oportunidades, regista pedidos, agenda
-            atendimentos e mantém as conversas ativas, mesmo quando a sua equipa
-            está ocupada.
+            A Muwoyo oferece atendimento automatizado no WhatsApp e integra as ferramentas necessárias para gerir clientes, organizar vendas, acompanhar pedidos e coordenar entregas. Simplifique processos, automatize tarefas e mantenha o controlo de cada etapa do seu negócio.
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
@@ -183,7 +179,7 @@ export default function HeroSection() {
               asChild
             >
               <Link to="/criar-conta" className="flex items-center justify-center">
-                Experimentar gratuitamente{" "}
+                Criar conta gratuitamente{" "}
                 <ArrowRight className="ml-2 w-3 h-3 sm:w-4 sm:h-4" />
               </Link>
             </Button>
@@ -193,7 +189,7 @@ export default function HeroSection() {
               className="border-emerald-500 text-emerald-500 hover:bg-emerald-50 rounded-full px-4 sm:px-6 font-bold text-sm sm:text-base py-3 sm:py-auto h-auto sm:h-10 min-h-[36px] sm:min-h-[36px]"
               onClick={() => document.getElementById("como-funciona")?.scrollIntoView({ behavior: "smooth" })}
             >
-              Ver como funciona
+              Conhecer a plataforma
             </Button>
           </div>
         </div>

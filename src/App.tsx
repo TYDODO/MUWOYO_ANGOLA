@@ -18,11 +18,25 @@ import BusinessInfo from "./pages/BusinessInfo";
 import MyWhatsApp from "./pages/MyWhatsApp";
 import StoreManagement from "./pages/StoreManagement";
 import MyProducts from "./pages/MyProducts";
+import SocialProofs from "./pages/SocialProofs";
 import PublicStore from "./pages/PublicStore";
 import MessageTopUp from "./pages/MessageTopUp";
 import Orders from "./pages/Orders";
 import Schedule from "./pages/Schedule";
 import AdminDashboard from "./pages/AdminDashboard";
+import AdminUsers from "./pages/AdminUsers";
+import AdminCustomers from "./pages/AdminCustomers";
+import AdminPlans from "./pages/AdminPlans";
+import AdminGeography from "./pages/AdminGeography";
+import AdminFunnel from "./pages/AdminFunnel";
+import AdminAiCosts from "./pages/AdminAiCosts";
+import AdminProofs from "./pages/AdminProofs";
+import AdminPaymentMethods from "./pages/AdminPaymentMethods";
+import AdminNotifications from "./pages/AdminNotifications";
+import AdminAudit from "./pages/AdminAudit";
+import AdminSupport from "./pages/AdminSupport";
+import AdminSettings from "./pages/AdminSettings";
+import AdminAutomations from "./pages/AdminAutomations";
 import AdminTokens from "./pages/AdminTokens";
 import AdminTutorials from "./pages/AdminTutorials";
 import AdminAffiliatesPage from "./pages/AdminAffiliates";
@@ -49,6 +63,8 @@ import FollowUp from "./pages/FollowUp";
 import Inbox from "./pages/Inbox";
 import TeamMembers from "./pages/TeamMembers";
 import AttendantDashboard from "./pages/AttendantDashboard";
+import DeliveryManagement from "./pages/DeliveryManagement";
+import DeliveryDashboard from "./pages/DeliveryDashboard";
 
 const queryClient = new QueryClient();
 const protectedPage = (page: JSX.Element) => (
@@ -118,7 +134,20 @@ const App = () => (
                 </RoleRoute>
               }
             />
-            <Route path="/admin/pagamentos" element={<RoleRoute allow={["admin"]}><AdminPayments /></RoleRoute>} />
+            <Route path="/admin/pagamentos" element={<RoleRoute allow={["admin"]}><AdminPaymentMethods /></RoleRoute>} />
+            <Route path="/admin/comprovativos" element={<RoleRoute allow={["admin"]}><AdminProofs /></RoleRoute>} />
+            <Route path="/admin/utilizadores" element={<RoleRoute allow={["admin"]}><AdminUsers /></RoleRoute>} />
+            <Route path="/admin/testes" element={<RoleRoute allow={["admin"]}><AdminUsers initialStatus="trial" /></RoleRoute>} />
+            <Route path="/admin/clientes-pagantes" element={<RoleRoute allow={["admin"]}><AdminCustomers /></RoleRoute>} />
+            <Route path="/admin/planos" element={<RoleRoute allow={["admin"]}><AdminPlans /></RoleRoute>} />
+            <Route path="/admin/geografia" element={<RoleRoute allow={["admin"]}><AdminGeography /></RoleRoute>} />
+            <Route path="/admin/funil" element={<RoleRoute allow={["admin"]}><AdminFunnel /></RoleRoute>} />
+            <Route path="/admin/ai-custos" element={<RoleRoute allow={["admin"]}><AdminAiCosts /></RoleRoute>} />
+            <Route path="/admin/automacoes" element={<RoleRoute allow={["admin"]}><AdminAutomations /></RoleRoute>} />
+            <Route path="/admin/notificacoes" element={<RoleRoute allow={["admin"]}><AdminNotifications /></RoleRoute>} />
+            <Route path="/admin/auditoria" element={<RoleRoute allow={["admin"]}><AdminAudit /></RoleRoute>} />
+            <Route path="/admin/suporte" element={<RoleRoute allow={["admin"]}><AdminSupport /></RoleRoute>} />
+            <Route path="/admin/definicoes" element={<RoleRoute allow={["admin"]}><AdminSettings /></RoleRoute>} />
             <Route path="/gestor/pagamentos" element={<RoleRoute allow={["sub_admin"]}><AdminPayments mode="sub" /></RoleRoute>} />
             <Route
               path="/gestor"
@@ -156,6 +185,8 @@ const App = () => (
             <Route path="/whatsapp" element={protectedPage(<MyWhatsApp />)} />
             <Route path="/pedidos" element={protectedPage(<Orders />)} />
             <Route path="/atendente" element={protectedPage(<AttendantDashboard />)} />
+            <Route path="/entregadores" element={protectedPage(<DeliveryManagement />)} />
+            <Route path="/entregador" element={<ProtectedRoute><DeliveryDashboard /></ProtectedRoute>} />
             <Route path="/agenda" element={protectedPage(<Schedule />)} />
             <Route
               path="/transferido-para-humano"
@@ -166,6 +197,7 @@ const App = () => (
               element={protectedPage(<StoreManagement />)}
             />
             <Route path="/produtos" element={protectedPage(<MyProducts />)} />
+            <Route path="/provas-sociais" element={protectedPage(<SocialProofs />)} />
             <Route path="/afiliados" element={protectedPage(<AffiliatesPage />)} />
             <Route path="/definicoes" element={protectedPage(<SettingsPage />)} />
             <Route path="/equipa" element={protectedPage(<TeamMembers />)} />

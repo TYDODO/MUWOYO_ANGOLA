@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import DashboardShell from "@/components/DashboardShell";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useBusinessMembership } from "@/hooks/useBusinessMembership";
 import {
   RefreshCw,
   Search,
@@ -37,6 +38,7 @@ type WhatsAppInstance = { id: string; instance_name: string };
 
 export default function MyWhatsApp() {
   const { user } = useAuth();
+  const { membership, ownerUserId, loading: membershipLoading } = useBusinessMembership();
   const { toast } = useToast();
   const [rows, setRows] = useState<Contact[]>([]);
   const [blocked, setBlocked] = useState<Blocked[]>([]);
@@ -50,39 +52,59 @@ export default function MyWhatsApp() {
   const [activeInstance, setActiveInstance] = useState<WhatsAppInstance | null>(null);
   const [activeTab, setActiveTab] = useState<"contacts" | "no-response" | "blocked">("contacts");
 
-  const load = async () => {
-    if (!user) return;
+  const load = useCallback(async () => {
+    if (membershipLoading) return;
+    const dataUserId = membership?.role === "attendant" ? ownerUserId : ownerUserId || user?.id;
+    if (!dataUserId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-    const [{ data: instance }, { data: c }, { data: b }] = await Promise.all([
-      supabase
+    const { data: instance, error: instanceError } = await supabase
         .from("instances")
         .select("id,instance_name")
-        .eq("user_id", user.id)
+        .eq("user_id", dataUserId)
         .order("created_at", { ascending: false })
         .limit(1)
-        .maybeSingle(),
-      supabase
-        .from("whatsapp_contacts")
-        .select("id, name, phone_number, should_respond, last_message_at, is_group")
-        .eq("user_id", user.id)
+        .maybeSingle();
+    if (instanceError) {
+      setLoading(false);
+      toast({ title: "Não foi possível carregar a instância WhatsApp", description: instanceError.message, variant: "destructive" });
+      return;
+    }
+    let contactsQuery = supabase
+      .from("whatsapp_contacts")
+      .select("id, name, phone_number, should_respond, last_message_at, is_group")
+      .eq("user_id", dataUserId);
+    if (instance?.instance_name) contactsQuery = contactsQuery.eq("instance_name", instance.instance_name);
+    const [contactsResult, blockedResult] = await Promise.all([
+      contactsQuery
         .eq("is_group", false)
         .order("last_message_at", { ascending: false, nullsFirst: false })
         .limit(500),
       supabase
         .from("blocked_contacts")
         .select("id, phone_number, reason, is_active")
-        .eq("user_id", user.id)
+        .eq("user_id", dataUserId)
         .eq("is_active", true),
     ]);
     setActiveInstance(instance || null);
-    setRows(((c as Contact[]) || []).filter((contact) => /^[1-9][0-9]{7,14}$/.test(contact.phone_number) && !contact.phone_number.includes("@")));
-    setBlocked((b as Blocked[]) || []);
+    if (contactsResult.error || blockedResult.error) {
+      setLoading(false);
+      const error = contactsResult.error || blockedResult.error;
+      toast({ title: "Não foi possível carregar os contactos", description: error?.message, variant: "destructive" });
+      return;
+    }
+    setRows(((contactsResult.data as Contact[]) || []).filter((contact) => /^[1-9][0-9]{7,14}$/.test(contact.phone_number) && !contact.phone_number.includes("@")));
+    setBlocked((blockedResult.data as Blocked[]) || []);
     setLoading(false);
-  };
+  }, [membership?.role, membershipLoading, ownerUserId, toast, user?.id]);
 
   useEffect(() => {
-    load();
-  }, [user]);
+    void load();
+  }, [load]);
+
+  const dataUserId = membership?.role === "attendant" ? ownerUserId : ownerUserId || user?.id;
 
   const toggleRespond = async (c: Contact) => {
     const nextValue = !c.should_respond;
@@ -96,16 +118,16 @@ export default function MyWhatsApp() {
 
   const addContact = async (event: FormEvent) => {
     event.preventDefault();
-    if (!user) return;
+    if (!dataUserId) return;
     if (!activeInstance) return toast({ title: "WhatsApp não conectado", description: "Conecte uma instância antes de adicionar contactos.", variant: "destructive" });
     const phoneNumber = manualPhone.replace(/\D/g, "");
     if (phoneNumber.length < 7 || phoneNumber.length > 15) return toast({ title: "Número inválido", description: "Introduza entre 7 e 15 dígitos.", variant: "destructive" });
-    const { error } = await supabase.from("whatsapp_contacts").upsert({ user_id: user.id, instance_name: activeInstance.instance_name, whatsapp_instance_id: activeInstance.id, remote_jid: `${phoneNumber}@s.whatsapp.net`, phone_number: phoneNumber, name: manualName.trim() || null, should_respond: manualShouldRespond }, { onConflict: "user_id,instance_name,phone_number" });
+    const { error } = await supabase.from("whatsapp_contacts").upsert({ user_id: dataUserId, instance_name: activeInstance.instance_name, whatsapp_instance_id: activeInstance.id, remote_jid: `${phoneNumber}@s.whatsapp.net`, phone_number: phoneNumber, name: manualName.trim() || null, should_respond: manualShouldRespond }, { onConflict: "user_id,instance_name,phone_number" });
     if (error) return toast({ title: "Não foi possível guardar o contacto", description: error.message, variant: "destructive" });
     setManualPhone("");
     setManualName("");
     toast({ title: "Contacto adicionado" });
-    load();
+    void load();
   };
 
   const toggleSelected = (id: string) => setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
@@ -123,60 +145,63 @@ export default function MyWhatsApp() {
   const toggleAll = () => setSelected((current) => allVisibleSelected ? current.filter((id) => !visibleContacts.some((c) => c.id === id)) : Array.from(new Set([...current, ...visibleContacts.map((c) => c.id)])));
   const bulkSetRespond = async (shouldRespond: boolean) => {
     if (!selected.length) return;
+    const count = selected.length;
     const { error } = await supabase.from("whatsapp_contacts").update({ should_respond: shouldRespond }).in("id", selected);
     if (error) return toast({ title: "Não foi possível atualizar os contactos", description: error.message, variant: "destructive" });
     setSelected([]);
-    toast({ title: `${selected.length} contacto(s) atualizado(s)` });
-    load();
+    toast({ title: `${count} contacto(s) atualizado(s)` });
+    void load();
   };
 
   const blockContact = async (c: Contact) => {
-    if (!user) return;
-    await supabase
+    if (!dataUserId) return;
+    const { error } = await supabase
       .from("blocked_contacts")
       .insert({
-        user_id: user.id,
+        user_id: dataUserId,
         phone_number: c.phone_number,
         is_active: true,
       });
+    if (error) return toast({ title: "Não foi possível bloquear o contacto", description: error.message, variant: "destructive" });
     toast({ title: "Contacto bloqueado" });
-    load();
+    void load();
   };
 
   const unblock = async (b: Blocked) => {
-    await supabase
+    const { error } = await supabase
       .from("blocked_contacts")
       .update({ is_active: false })
       .eq("id", b.id);
+    if (error) return toast({ title: "Não foi possível desbloquear o contacto", description: error.message, variant: "destructive" });
     toast({ title: "Desbloqueado" });
-    load();
+    void load();
   };
 
   const importFromWhatsApp = async () => {
+    if (!activeInstance) return toast({ title: "WhatsApp não conectado", description: "Conecte uma instância antes de importar contactos.", variant: "destructive" });
     setImporting(true);
     try {
       const { data, error } = await supabase.functions.invoke("whatsapp-import", {
-        body: {},
+        body: { instanceName: activeInstance.instance_name },
       });
-      setImporting(false);
       if (error) {
-        console.warn("Function whatsapp-import not available:", error.message);
-        return toast({
-          title: "Erro",
-          description: error.message,
-          variant: "destructive",
-        });
+        let description = error.message;
+        if ("context" in error && error.context instanceof Response) {
+          const responseBody = await error.context.clone().json().catch(() => null);
+          if (typeof responseBody?.error === "string") description = responseBody.error;
+        }
+        return toast({ title: "Erro ao importar contactos", description, variant: "destructive" });
       }
       toast({ title: `${data?.imported || 0} contactos sincronizados` });
-      load();
+      void load();
     } catch (error) {
-      setImporting(false);
-      console.warn("Function call failed:", error);
       toast({
-        title: "Erro",
-        description: "Erro ao conectar com o servidor",
+        title: "Erro ao importar contactos",
+        description: error instanceof Error ? error.message : "Erro ao conectar com o servidor",
         variant: "destructive",
       });
+    } finally {
+      setImporting(false);
     }
   };
   const filteredBlocked = useMemo(
@@ -202,7 +227,7 @@ export default function MyWhatsApp() {
         <Button
           variant="outline"
           onClick={importFromWhatsApp}
-          disabled={importing}
+          disabled={importing || !activeInstance}
           className="gap-2"
         >
           <DownloadCloud

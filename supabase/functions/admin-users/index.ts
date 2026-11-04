@@ -354,6 +354,12 @@ Deno.serve(async (req) => {
             .select("user_id")
             .eq("role", targetRole);
           targets = data || [];
+        } else if (targetRole === "admin") {
+          const { data } = await admin
+            .from("user_roles")
+            .select("user_id")
+            .eq("role", "admin");
+          targets = data || [];
         } else if (body.userId) {
           targets = [{ user_id: body.userId }];
         }

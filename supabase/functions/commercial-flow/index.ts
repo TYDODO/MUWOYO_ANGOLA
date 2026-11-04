@@ -31,7 +31,7 @@ async function actor(req: Request) {
   return role && { admin, user: data.user, role };
 }
 
-async function dispatchSetupPaymentEmail(admin: any, requestId: string, userId: string) {
+async function dispatchSetupPaymentEmail(admin: ReturnType<typeof createClient>, requestId: string, userId: string) {
   const { data: profile, error: profileError } = await admin
     .from("profiles")
     .select("email,full_name")
@@ -70,9 +70,10 @@ Deno.serve(async (req) => {
       const { data: requests, error } = await query;
       if (error) return json({ error: error.message }, 500);
       const ids = (requests || []).map((item) => item.user_id);
-      let profilesQuery = current.admin.from("profiles").select("user_id,full_name,email,phone,created_at,account_status,setup_paid_at").in("user_id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"]);
-      if (current.role === "sub_admin") profilesQuery = profilesQuery.eq("created_by", current.user.id);
-      const { data: profiles, error: profilesError } = await profilesQuery;
+      const profilesQuery = current.admin.from("profiles").select("user_id,full_name,email,phone,created_at,account_status,setup_paid_at").in("user_id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"]);
+      const { data: profiles, error: profilesError } = current.role === "sub_admin"
+        ? await profilesQuery.eq("created_by", current.user.id)
+        : await profilesQuery;
       if (profilesError) return json({ error: profilesError.message }, 500);
       const profileMap = new Map((profiles || []).map((profile) => [profile.user_id, profile]));
       return json({ requests: (requests || []).filter((item) => profileMap.get(item.user_id)?.account_status !== "active").map((item) => ({ ...item, profile: profileMap.get(item.user_id) })) });
@@ -151,9 +152,56 @@ Deno.serve(async (req) => {
       });
       if (error) {
         console.error("confirm_plan_subscription RPC failed", error);
-        return json({ error: "payment_confirmation_failed" }, 400);
+        return json({ error: error.message || "payment_confirmation_failed" }, 400);
       }
       return json(data);
+    }
+
+    if (action === "rejectPlanPayment") {
+      const subscriptionId = String(body.subscriptionId || "");
+      const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 1000) : "";
+      if (!subscriptionId || !reason) return json({ error: "subscription_id_and_rejection_reason_required" }, 400);
+      const { data: subscription, error: subscriptionError } = await current.admin
+        .from("plan_subscriptions")
+        .select("id,user_id,status")
+        .eq("id", subscriptionId)
+        .maybeSingle();
+      if (subscriptionError || !subscription) return json({ error: subscriptionError?.message || "subscription_not_found" }, 404);
+      if (subscription.status !== "pending") return json({ error: "only_pending_payments_can_be_rejected" }, 409);
+      if (current.role === "sub_admin") {
+        const { data: owned, error: ownershipError } = await current.admin
+          .from("profiles")
+          .select("user_id")
+          .eq("user_id", subscription.user_id)
+          .eq("created_by", current.user.id)
+          .maybeSingle();
+        if (ownershipError || !owned) return json({ error: ownershipError?.message || "not_authorized_for_user" }, 403);
+      }
+
+      const { data: rejected, error: rejectError } = await current.admin
+        .from("plan_subscriptions")
+        .update({
+          status: "rejected",
+          rejection_reason: reason,
+          rejected_at: new Date().toISOString(),
+          rejected_by: current.user.id,
+        })
+        .eq("id", subscriptionId)
+        .eq("status", "pending")
+        .select("id")
+        .maybeSingle();
+      if (rejectError) return json({ error: "payment_rejection_failed" }, 500);
+      if (!rejected) return json({ error: "payment_status_changed_retry" }, 409);
+
+      const { error: notificationError } = await current.admin.from("notifications").insert({
+        user_id: subscription.user_id,
+        title: "Comprovativo de pagamento recusado",
+        message: `O comprovativo foi recusado. Motivo: ${reason}`,
+        type: "payment_rejected",
+        link: "/faturacao",
+      });
+      if (notificationError) console.error("Payment rejection notification failed", notificationError.message);
+      return json({ ok: true, status: "rejected" });
     }
 
     if (action === "activateAccount") {

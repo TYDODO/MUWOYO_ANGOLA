@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   advanceDeliveryStatus,
+  extractEvolutionMessageId,
   getScopedMessageKey,
+  isEvolutionMessageFromMe,
   normalizeWhatsAppPhone,
   resolveDeliveryStatus,
   resolveMessageDirection,
@@ -9,7 +11,21 @@ import {
 } from "../lib/message-identity";
 
 describe("message identity and delivery rules", () => {
+  it("extracts Evolution external message IDs from supported response shapes", () => {
+    expect(extractEvolutionMessageId({ key: { id: "message-root" } })).toBe("message-root");
+    expect(extractEvolutionMessageId({ data: { key: { id: "message-data" } } })).toBe("message-data");
+    expect(extractEvolutionMessageId({ message: { key: { id: "message-nested" } } })).toBe("message-nested");
+    expect(extractEvolutionMessageId({ key: { id: 123 } })).toBeNull();
+  });
+
   it("treats fromMe as outbound and keeps inbound as unread only when historical is false", () => {
+    expect(isEvolutionMessageFromMe({ key: { fromMe: true } })).toBe(true);
+    expect(isEvolutionMessageFromMe({ key: { fromMe: "true" } })).toBe(true);
+    expect(isEvolutionMessageFromMe({ from_me: 1 })).toBe(true);
+    expect(isEvolutionMessageFromMe({ data: { key: { fromMe: true } } })).toBe(true);
+    expect(isEvolutionMessageFromMe({ message: { key: { fromMe: true } } })).toBe(true);
+    expect(isEvolutionMessageFromMe({ key: { fromMe: "false" } })).toBe(false);
+    expect(isEvolutionMessageFromMe({ key: { fromMe: false } })).toBe(false);
     expect(resolveMessageDirection(true)).toBe("outbound");
     expect(resolveMessageDirection(false)).toBe("inbound");
     expect(shouldMarkAsUnread("inbound", false)).toBe(true);

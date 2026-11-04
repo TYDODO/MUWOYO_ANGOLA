@@ -26,7 +26,9 @@ function errorMessage(error: EmailVerificationError) {
     case "too_many_attempts": return "O limite de tentativas foi atingido. Solicite um novo código mais tarde.";
     case "resend_cooldown": return "Aguarde alguns segundos antes de solicitar outro código.";
     case "unauthorized": return "A sua sessão expirou. Entre novamente para confirmar o e-mail.";
-    case "not_configured": return "A confirmação por código ainda não está disponível. O backend de verificação será ligado posteriormente.";
+    case "not_configured": return "O envio de e-mails ainda não está configurado. Tente mais tarde ou fale com o suporte.";
+    case "invalid_email": return "O endereço de e-mail informado é inválido.";
+    case "delivery_failed": return "Não foi possível entregar o e-mail. Verifique o endereço e tente novamente.";
     default: return "Ocorreu um erro temporário. Tente novamente.";
   }
 }
@@ -58,7 +60,7 @@ export default function EmailVerification() {
     initialSendStarted.current = true;
     resendVerificationCode(email).then((result) => {
       if (result.success) setCooldown(RESEND_COOLDOWN_SECONDS);
-      else setError(result.error);
+      else if ("error" in result) setError(result.error);
     });
   }, [initialSend, email]);
 
@@ -103,7 +105,7 @@ export default function EmailVerification() {
       setStatus("success");
       window.sessionStorage.removeItem("muwoyo_pending_email");
       window.setTimeout(() => navigate(emailChange ? "/dashboard" : "/dashboard", { replace: true }), 500);
-    } else {
+    } else if ("error" in result) {
       setStatus("error");
       setError(result.error);
     }
@@ -119,7 +121,7 @@ export default function EmailVerification() {
       setDigits(Array(CODE_LENGTH).fill(""));
       setStatus("idle");
       setError(null);
-    } else {
+    } else if ("error" in result) {
       setStatus("error");
       setError(result.error);
     }

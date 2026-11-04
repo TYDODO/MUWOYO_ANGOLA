@@ -24,6 +24,7 @@ describe("buildAdminDashboardMetrics", () => {
         messages_received: 10,
         status: "active",
         trial_started_at: "2026-09-09T00:00:00.000Z",
+        trial_expires_at: "2026-10-20T00:00:00.000Z",
       },
       {
         user_id: "u3",
@@ -48,10 +49,11 @@ describe("buildAdminDashboardMetrics", () => {
     ];
 
     const subscriptions = [
-      { user_id: "u1", status: "active", confirmed_at: "2026-09-05T00:00:00.000Z", amount_kz: 15000 },
-      { user_id: "u1", status: "active", confirmed_at: "2026-09-20T00:00:00.000Z", amount_kz: 21000 },
-      { user_id: "u2", status: "pending", confirmed_at: null, amount_kz: 20000 },
-      { user_id: "u4", status: "active", confirmed_at: "2026-09-21T00:00:00.000Z", amount_kz: 32000 },
+      { user_id: "u1", status: "expired", confirmed_at: "2026-09-05T00:00:00.000Z", expires_at: "2026-10-05T00:00:00.000Z", plan_price_kz: 15000 },
+      { user_id: "u1", status: "active", confirmed_at: "2026-09-20T00:00:00.000Z", expires_at: "2026-11-20T00:00:00.000Z", plan_price_kz: 21000 },
+      { user_id: "u2", status: "pending", confirmed_at: null, plan_price_kz: 20000 },
+      { user_id: "u3", status: "active", confirmed_at: "2026-09-25T00:00:00.000Z", expires_at: "2026-11-25T00:00:00.000Z", plan_price_kz: 10000 },
+      { user_id: "u4", status: "active", confirmed_at: "2026-09-21T00:00:00.000Z", plan_price_kz: 32000 },
     ];
 
     const instances = [
@@ -70,16 +72,16 @@ describe("buildAdminDashboardMetrics", () => {
 
     expect(result.totalUsers).toBe(4);
     expect(result.newUsers).toBe(4);
-    expect(result.activeUsers).toBe(2);
-    expect(result.inactiveUsers).toBe(2);
+    expect(result.activeUsers).toBe(3);
+    expect(result.inactiveUsers).toBe(1);
     expect(result.onboardingCompleted).toBe(3);
     expect(result.connectedWhatsApp).toBe(2);
     expect(result.automationOperational).toBe(1);
     expect(result.trialUsers).toBe(1);
-    expect(result.paidCustomers).toBe(2);
-    expect(result.recentPayingCustomers).toBe(2);
+    expect(result.paidCustomers).toBe(3);
+    expect(result.recentPayingCustomers).toBe(3);
     expect(result.repeatBuyers).toBe(1);
     expect(result.creditDepleted).toBe(2);
-    expect(result.totalConfirmedRevenue).toBe(68000);
+    expect(result.estimatedPlanValue).toBe(78000);
   });
 });

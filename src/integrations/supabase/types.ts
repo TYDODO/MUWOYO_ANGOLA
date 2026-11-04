@@ -421,6 +421,53 @@ export type Database = {
         }
         Relationships: []
       }
+      social_proofs: {
+        Row: {
+          created_at: string
+          description: string
+          id: string
+          is_active: boolean
+          media_url: string | null
+          product_id: string | null
+          proof_type: "product" | "service"
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          id?: string
+          is_active?: boolean
+          media_url?: string | null
+          product_id?: string | null
+          proof_type: "product" | "service"
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          id?: string
+          is_active?: boolean
+          media_url?: string | null
+          product_id?: string | null
+          proof_type?: "product" | "service"
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_proofs_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           category: string | null
@@ -661,9 +708,17 @@ export type Database = {
           customer_location: string | null
           customer_name: string | null
           customer_phone: string | null
+          delivery_address: string | null
+          delivery_distance_km: number | null
+          delivery_fee: number
+          delivery_status: string
+          discount: number
           id: string
           items: Json
           notes: string | null
+          order_number: string
+          payment_status: string | null
+          subtotal: number
           status: string
           total: number | null
           updated_at: string
@@ -674,9 +729,17 @@ export type Database = {
           customer_location?: string | null
           customer_name?: string | null
           customer_phone?: string | null
+          delivery_address?: string | null
+          delivery_distance_km?: number | null
+          delivery_fee?: number
+          delivery_status?: string
+          discount?: number
           id?: string
           items?: Json
           notes?: string | null
+          order_number?: string
+          payment_status?: string | null
+          subtotal?: number
           status?: string
           total?: number | null
           updated_at?: string
@@ -687,13 +750,168 @@ export type Database = {
           customer_location?: string | null
           customer_name?: string | null
           customer_phone?: string | null
+          delivery_address?: string | null
+          delivery_distance_km?: number | null
+          delivery_fee?: number
+          delivery_status?: string
+          discount?: number
           id?: string
           items?: Json
           notes?: string | null
+          order_number?: string
+          payment_status?: string | null
+          subtotal?: number
           status?: string
           total?: number | null
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      delivery_people: {
+        Row: {
+          avatar_url: string | null
+          business_id: string
+          created_at: string
+          email: string
+          id: string
+          name: string
+          notes: string | null
+          phone: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          business_id: string
+          created_at?: string
+          email: string
+          id?: string
+          name: string
+          notes?: string | null
+          phone?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          business_id?: string
+          created_at?: string
+          email?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      delivery_order_assignments: {
+        Row: {
+          active: boolean
+          assigned_at: string
+          assigned_by: string | null
+          delivery_person_id: string
+          id: string
+          is_primary: boolean
+          order_id: string
+          unassigned_at: string | null
+        }
+        Insert: {
+          active?: boolean
+          assigned_at?: string
+          assigned_by?: string | null
+          delivery_person_id: string
+          id?: string
+          is_primary?: boolean
+          order_id: string
+          unassigned_at?: string | null
+        }
+        Update: {
+          active?: boolean
+          assigned_at?: string
+          assigned_by?: string | null
+          delivery_person_id?: string
+          id?: string
+          is_primary?: boolean
+          order_id?: string
+          unassigned_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_order_assignments_delivery_person_id_fkey"
+            columns: ["delivery_person_id"]
+            isOneToOne: false
+            referencedRelation: "delivery_people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_order_assignments_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "store_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      delivery_fee_settings: {
+        Row: {
+          business_id: string
+          default_fee: number
+          distance_rules: Json
+          fee_type: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          business_id: string
+          default_fee?: number
+          distance_rules?: Json
+          fee_type?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          business_id?: string
+          default_fee?: number
+          distance_rules?: Json
+          fee_type?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      delivery_order_status_history: {
+        Row: {
+          actor_user_id: string | null
+          business_id: string
+          created_at: string
+          delivery_status: string
+          id: string
+          notes: string | null
+          order_id: string
+        }
+        Insert: {
+          actor_user_id?: string | null
+          business_id: string
+          created_at?: string
+          delivery_status: string
+          id?: string
+          notes?: string | null
+          order_id: string
+        }
+        Update: {
+          actor_user_id?: string | null
+          business_id?: string
+          created_at?: string
+          delivery_status?: string
+          id?: string
+          notes?: string | null
+          order_id?: string
         }
         Relationships: []
       }
@@ -852,6 +1070,7 @@ export type Database = {
       whatsapp_contacts: {
         Row: {
           created_at: string
+          crm_viewed_at: string | null
           id: string
           instance_name: string | null
           last_message_at: string | null
@@ -862,6 +1081,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          crm_viewed_at?: string | null
           id?: string
           instance_name?: string | null
           last_message_at?: string | null
@@ -872,6 +1092,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          crm_viewed_at?: string | null
           id?: string
           instance_name?: string | null
           last_message_at?: string | null
@@ -894,13 +1115,37 @@ export type Database = {
         }
         Returns: boolean
       }
+      assign_delivery_people: {
+        Args: {
+          p_delivery_person_ids: string[]
+          p_order_id: string
+          p_primary_delivery_person_id?: string | null
+        }
+        Returns: undefined
+      }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
+      update_delivery_order_status: {
+        Args: { p_notes?: string | null; p_order_id: string; p_status: string }
+        Returns: undefined
+      }
       match_ai_documents: {
         Args: { _limit?: number; _query: string; _user_id: string }
         Returns: {
           content: string
           id: string
           similarity: number
+          title: string
+        }[]
+      }
+      match_social_proofs: {
+        Args: { _context: string; _limit?: number; _product_id?: string; _query: string; _user_id: string }
+        Returns: {
+          description: string
+          id: string
+          media_url: string | null
+          product_id: string | null
+          proof_type: "product" | "service"
+          relevance: number
           title: string
         }[]
       }
