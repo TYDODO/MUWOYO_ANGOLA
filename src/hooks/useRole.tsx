@@ -1,14 +1,9 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { resolveAppRole, type AppRole } from "@/lib/app-role";
 
-export type AppRole = "admin" | "sub_admin" | "client" | null;
-
-const resolveRole = (roles: string[] = []): Exclude<AppRole, null> => {
-  if (roles.includes("admin")) return "admin";
-  if (roles.includes("sub_admin")) return "sub_admin";
-  return "client";
-};
+export type { AppRole } from "@/lib/app-role";
 
 export function useRole() {
   const { user, loading: authLoading } = useAuth();
@@ -27,14 +22,26 @@ export function useRole() {
     let cancelled = false;
     const loadRole = async () => {
       try {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from("user_roles")
           .select("role")
           .eq("user_id", user.id);
-        if (!cancelled) setRole(resolveRole((data || []).map((r) => r.role)));
+        if (error) throw error;
+
+        const roles = (data || []).map((row) => row.role);
+        if (!roles.some((item) => item === "attendant" || item === "delivery_person")) {
+          const { data: deliveryPerson, error: deliveryError } = await supabase
+            .from("delivery_people")
+            .select("id")
+            .eq("user_id", user.id)
+            .maybeSingle();
+          if (deliveryError) throw deliveryError;
+          if (deliveryPerson) roles.push("delivery_person");
+        }
+        if (!cancelled) setRole(resolveAppRole(roles));
       } catch (error) {
         console.error("Erro ao verificar a função do usuário:", error);
-        if (!cancelled) setRole("client");
+        if (!cancelled) setRole(null);
       } finally {
         if (!cancelled) setLoading(false);
       }

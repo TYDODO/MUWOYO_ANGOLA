@@ -188,10 +188,18 @@ export default function Inbox() {
   const readRequestsInFlightRef = useRef(new Set<string>());
   const pendingInitialScrollConversationRef = useRef<string | null>(null);
   const scrollAfterLoadRef = useRef(false);
+  const inboxLoadErrorRef = useRef<string | null>(null);
 
   const load = async () => {
     if (!user || !ownerUserId) return;
-    const { data: instanceRows } = await db.from("instances").select("instance_name,phone,connection_state").eq("user_id", ownerUserId).order("created_at");
+    const { data: instanceRows, error: instancesError } = await db.from("instances").select("instance_name,phone,connection_state").eq("user_id", ownerUserId).order("created_at");
+    if (instancesError) {
+      if (inboxLoadErrorRef.current !== instancesError.message) {
+        inboxLoadErrorRef.current = instancesError.message;
+        toast({ title: "Não foi possível carregar as contas de WhatsApp", description: instancesError.message, variant: "destructive" });
+      }
+      return;
+    }
     const nextInstances = instanceRows || [];
     setInstances(nextInstances);
     const instanceName = activeInstance || nextInstances[0]?.instance_name;
@@ -209,7 +217,7 @@ export default function Inbox() {
       .eq("instance_name", instanceName)
       .order("last_message_at", { ascending: false, nullsFirst: false });
     if (membership?.role === "attendant") conversationsQuery = conversationsQuery.eq("assigned_to", user.id);
-    const [{ data: rows }, { data: contacts }, { data: metadataRows }, stageResult, tagResult, { data: tagLinks }] = await Promise.all([
+    const [conversationResult, contactResult, { data: metadataRows }, stageResult, tagResult, { data: tagLinks }] = await Promise.all([
       conversationsQuery,
       db
         .from("whatsapp_contacts")
@@ -221,6 +229,22 @@ export default function Inbox() {
       db.from("crm_tags").select("id,name,color").eq("user_id", ownerUserId),
       db.from("crm_contact_tags").select("contact_id,tag_id").eq("user_id", ownerUserId),
     ]);
+    const loadError = conversationResult.error || contactResult.error;
+    if (loadError) {
+      if (inboxLoadErrorRef.current !== loadError.message) {
+        inboxLoadErrorRef.current = loadError.message;
+        toast({
+          title: membership?.role === "attendant" ? "Não foi possível carregar as conversas atribuídas" : "Não foi possível carregar as conversas",
+          description: loadError.message,
+          variant: "destructive",
+        });
+      }
+      setConversations([]);
+      return;
+    }
+    inboxLoadErrorRef.current = null;
+    const rows = conversationResult.data;
+    const contacts = contactResult.data;
     const [{ data: stageFallback }, { data: tagFallback }] = await Promise.all([
       stageResult.error && isMissingColorColumn(stageResult.error)
         ? db.from("crm_stages").select("id,name").eq("user_id", ownerUserId)

@@ -97,6 +97,8 @@ export default function OnboardingGate({
   const { membership, loading: membershipLoading } = useBusinessMembership();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [done, setDone] = useState(true);
   const [step, setStep] = useState(-1);
   const [showLegalAcceptance, setShowLegalAcceptance] = useState(false);
@@ -124,15 +126,30 @@ export default function OnboardingGate({
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!user) return;
-    supabase
-      .from("profiles")
-      .select(
-        "onboarding_completed,acquisition_source,business_name,ai_name,transfer_phone,ai_personality,business_description,ai_rules,business_hours,appointment_duration_minutes,accepts_appointments",
-      )
-      .eq("user_id", user.id)
-      .maybeSingle()
-      .then(({ data }: any) => {
+    if (!user || roleLoading || membershipLoading) return;
+    if ((role && role !== "client") || membership?.role === "attendant") {
+      setDone(true);
+      setStateLoaded(true);
+      setLoading(false);
+      setLoadError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+    setLoadError(null);
+    const loadOnboarding = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select(
+            "onboarding_completed,acquisition_source,business_name,ai_name,transfer_phone,ai_personality,business_description,ai_rules,business_hours,appointment_duration_minutes,accepts_appointments",
+          )
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (error) throw error;
+        if (cancelled) return;
+
         const draft = readBusinessInfoDraft(user.id) || {};
         const savedState = window.localStorage.getItem(`muwoyo-onboarding-state-${user.id}`);
         let onboardingState: { step?: number; legal?: boolean } = {};
@@ -154,8 +171,16 @@ export default function OnboardingGate({
         });
         setStateLoaded(true);
         setLoading(false);
-      });
-  }, [user]);
+      } catch (error) {
+        if (cancelled) return;
+        console.error("Não foi possível carregar o onboarding", error);
+        setLoadError(error instanceof Error ? error.message : "Erro inesperado ao carregar o onboarding.");
+        setLoading(false);
+      }
+    };
+    void loadOnboarding();
+    return () => { cancelled = true; };
+  }, [user, role, roleLoading, membership, membershipLoading, loadAttempt]);
 
   useEffect(() => {
     if (user && !done) writeBusinessInfoDraft(user.id, form);
@@ -174,7 +199,15 @@ export default function OnboardingGate({
     );
   if (role === "admin") return <Navigate to="/admin" replace />;
   if (role === "sub_admin") return <Navigate to="/gestor" replace />;
-  if (membership?.role === "attendant") return <>{children}</>;
+  if ((role && role !== "client") || membership?.role === "attendant") return <>{children}</>;
+  if (loadError) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center">
+        <p className="text-sm text-destructive">Não foi possível carregar os dados do onboarding: {loadError}</p>
+        <Button onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Tentar novamente</Button>
+      </div>
+    );
+  }
   if (done) return <>{children}</>;
 
   // Show legal acceptance after form completion

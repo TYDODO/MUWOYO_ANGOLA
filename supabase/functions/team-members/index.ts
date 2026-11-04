@@ -82,7 +82,15 @@ Deno.serve(async (req) => {
       const { data: member, error: memberError } = await admin.from("business_members").insert({ business_id: businessId, user_id: user.id, role: "attendant", status: "pending", name, email }).select("id").single();
       if (memberError) { await admin.auth.admin.deleteUser(user.id); return json({ error: memberError.message }, 400); }
       const selected = Array.isArray(body.permissions) ? body.permissions.filter((item: unknown) => permissions.includes(String(item))) : ["inbox.view", "inbox.send"];
-      await admin.from("business_member_permissions").insert(selected.map((permission: string) => permissionRow(businessId, member.id, permission, body.permission_scopes || {})));
+      if (selected.length) {
+        const { error: permissionError } = await admin.from("business_member_permissions").insert(selected.map((permission: string) => permissionRow(businessId, member.id, permission, body.permission_scopes || {})));
+        if (permissionError) {
+          console.error("Could not assign attendant permissions", permissionError.message);
+          const { error: rollbackError } = await admin.auth.admin.deleteUser(user.id);
+          if (rollbackError) console.error("Could not roll back attendant account", rollbackError.message);
+          return json({ error: "attendant_permissions_save_failed" }, 500);
+        }
+      }
       await admin.from("business_audit_log").insert({ business_id: businessId, actor_user_id: current.user.id, target_user_id: user.id, action: "member_created", metadata: { email, permissions: selected } });
       const verification = await sendAttendantVerification(email).catch((error) => ({ ok: false, error: error instanceof Error ? error.message : "temporary_error" }));
       return json({ ok: true, member_id: member.id, user_id: user.id, status: "pending", verification_sent: verification.ok, verification_error: verification.ok ? null : verification.error });

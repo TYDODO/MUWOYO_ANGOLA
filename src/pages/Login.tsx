@@ -3,16 +3,19 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { resolveAppRole } from "@/lib/app-role";
 import logo from "@/assets/muwoyo-logo.png";
 import { initWebPush, isValidVapidPublicKey } from "@/lib/web-push";
 
 export default function Login() {
-  const { user, signIn, loading } = useAuth();
+  const { user, signIn, signOut, loading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [standalone, setStandalone] = useState(false);
+  const [routingError, setRoutingError] = useState(false);
+  const [routeAttempt, setRouteAttempt] = useState(0);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -30,46 +33,79 @@ export default function Login() {
 
   useEffect(() => {
     if (!loading && user) {
-      const checkUserRole = async () => {
+      let cancelled = false;
+      setRoutingError(false);
+      const redirectSignedInUser = async () => {
         try {
-          const { data: roleData, error: roleError } = await supabase
+          const { data: roleRows, error: roleError } = await supabase
             .from("user_roles")
             .select("role")
-            .eq("user_id", user.id)
-            .maybeSingle();
+            .eq("user_id", user.id);
+          if (roleError) throw roleError;
 
-          if (roleError) console.warn("Não foi possível ler a função; usando cliente:", roleError.message);
-
-          const userRole = roleData?.role || "client";
+          const userRole = resolveAppRole((roleRows || []).map((row) => row.role));
           if (userRole === "admin") {
-            navigate("/admin", { replace: true });
+            if (!cancelled) navigate("/admin", { replace: true });
             return;
           }
           if (userRole === "sub_admin") {
-            navigate("/gestor", { replace: true });
+            if (!cancelled) navigate("/gestor", { replace: true });
             return;
           }
 
-          const { data: profile } = await supabase.from("profiles").select("email_verified").eq("user_id", user.id).maybeSingle();
-          if (!profile?.email_verified) {
+          const { data: profile, error: profileError } = await supabase
+            .from("profiles")
+            .select("email_verified")
+            .eq("user_id", user.id)
+            .maybeSingle();
+          if (profileError) throw profileError;
+          if (!profile?.email_verified && !user.email_confirmed_at) {
             window.sessionStorage.setItem("muwoyo_pending_email", user.email || "");
-            navigate("/confirmar-email", { replace: true, state: { email: user.email } });
+            if (!cancelled) navigate("/confirmar-email", { replace: true, state: { email: user.email } });
             return;
           }
 
-          navigate("/dashboard", { replace: true });
+          const destination = userRole === "attendant"
+            ? "/atendente"
+            : userRole === "delivery_person"
+              ? "/entregador"
+              : "/dashboard";
+          if (!cancelled) navigate(destination, { replace: true });
         } catch (error) {
           console.error("Erro ao verificar role:", error);
-          navigate("/dashboard", { replace: true });
+          toast({
+            title: "Não foi possível validar o acesso",
+            description: error instanceof Error ? error.message : "Tente novamente.",
+            variant: "destructive",
+          });
+          if (!cancelled) setRoutingError(true);
         }
       };
 
-      checkUserRole();
+      void redirectSignedInUser();
+      return () => { cancelled = true; };
     }
-  }, [loading, user, navigate]);
+  }, [loading, user, navigate, toast, routeAttempt]);
 
-  if (loading || user) {
+  if (loading) {
     return <div className="min-h-screen bg-gray-100 flex items-center justify-center" aria-label="Carregando" />;
+  }
+  if (user && routingError) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-gray-100 p-6">
+        <section className="w-full max-w-md space-y-4 rounded-xl bg-white p-6 text-center shadow-lg">
+          <h1 className="text-xl font-semibold text-gray-800">Não foi possível validar o acesso</h1>
+          <p className="text-sm text-gray-500">A sua sessão continua ativa. Tente novamente ou saia e volte a entrar.</p>
+          <div className="flex justify-center gap-3">
+            <button type="button" className="rounded-md border px-4 py-2 text-sm" onClick={() => setRouteAttempt((attempt) => attempt + 1)}>Tentar novamente</button>
+            <button type="button" className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground" onClick={() => void signOut()}>Sair</button>
+          </div>
+        </section>
+      </main>
+    );
+  }
+  if (user) {
+    return <div className="min-h-screen bg-gray-100 flex items-center justify-center" aria-label="A redirecionar" />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -90,47 +126,7 @@ export default function Login() {
       });
     }
 
-    try {
-      const {
-        data: { user: currentUser },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError || !currentUser) {
-        navigate("/dashboard", { replace: true });
-        return;
-      }
-
-      const { data: roleData, error: roleError } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", currentUser.id)
-        .maybeSingle();
-
-      if (roleError) console.warn("Não foi possível ler a função; usando cliente:", roleError.message);
-
-      const userRole = roleData?.role || "client";
-      if (userRole === "admin") {
-        navigate("/admin", { replace: true });
-        return;
-      }
-      if (userRole === "sub_admin") {
-        navigate("/gestor", { replace: true });
-        return;
-      }
-
-      const { data: profile } = await supabase.from("profiles").select("email_verified").eq("user_id", currentUser.id).maybeSingle();
-      if (!profile?.email_verified) {
-        window.sessionStorage.setItem("muwoyo_pending_email", currentUser.email || email);
-        navigate("/confirmar-email", { replace: true, state: { email: currentUser.email || email } });
-        return;
-      }
-
-      navigate("/dashboard", { replace: true });
-    } catch (error) {
-      console.error("Erro ao verificar role após login:", error);
-      navigate("/dashboard", { replace: true });
-    }
+    // AuthProvider observes the sign-in and the effect above routes by role.
   };
 
   const handleCreateAccount = () => {

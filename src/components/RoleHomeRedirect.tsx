@@ -29,8 +29,8 @@ export default function RoleHomeRedirect({
     console.log("RoleHomeRedirect - redirecionando para /gestor");
     return <Navigate to="/gestor" replace />;
   }
-  if (membership?.role === "attendant") return <Navigate to="/atendente" replace />;
-  if (deliveryPerson?.status === "active") return <Navigate to="/entregador" replace />;
+  if (role === "attendant" || membership?.role === "attendant") return <Navigate to="/atendente" replace />;
+  if (role === "delivery_person" || deliveryPerson?.status === "active") return <Navigate to="/entregador" replace />;
   console.log("RoleHomeRedirect - mantendo em /dashboard");
   return <>{children}</>;
 }
