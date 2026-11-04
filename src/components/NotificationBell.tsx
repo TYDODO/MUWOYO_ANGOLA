@@ -8,14 +8,18 @@ import { useAuth } from "@/hooks/useAuth";
 import { initWebPush } from "@/lib/web-push";
 import { useToast } from "@/hooks/use-toast";
 
-type Notice = { id: string; title: string; message: string; is_read: boolean | null; image_url?: string | null; link?: string | null; created_at?: string | null };
+type Notice = { id: string; title: string; message: string; type?: string | null; is_read: boolean | null; image_url?: string | null; link?: string | null; created_at?: string | null };
+const TRIAL_NOTICE_TYPES = new Set(["trial_start", "trial_expired", "trial_expiring_1_day", "trial_last_day"]);
 
-export default function NotificationBell() {
+export default function NotificationBell({ hideTrialNotifications = false }: { hideTrialNotifications?: boolean }) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [items, setItems] = useState<Notice[]>([]);
   const [pushAvailable, setPushAvailable] = useState(false);
-  const unread = items.filter((n) => !n.is_read).length;
+  const visibleItems = hideTrialNotifications
+    ? items.filter((item) => !item.type || !TRIAL_NOTICE_TYPES.has(item.type))
+    : items;
+  const unread = visibleItems.filter((n) => !n.is_read).length;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -24,11 +28,15 @@ export default function NotificationBell() {
 
   const load = async () => {
     if (!user) return;
-    const { data } = await supabase.from("notifications").select("id,title,message,is_read,image_url,link,created_at").eq("user_id", user.id).order("created_at", { ascending: false }).limit(30);
+    const { data, error } = await supabase.from("notifications").select("id,title,message,type,is_read,image_url,link,created_at").eq("user_id", user.id).order("created_at", { ascending: false }).limit(30);
+    if (error) {
+      console.error("Could not load notifications", error.message);
+      return;
+    }
     setItems((data as any) || []);
   };
 
-  useEffect(() => { load(); }, [user]);
+  useEffect(() => { load(); }, [user, hideTrialNotifications]);
 
   const handleEnablePush = async () => {
     const result = await initWebPush();
@@ -62,7 +70,7 @@ export default function NotificationBell() {
           </div>
         </div>
         <div className="max-h-96 overflow-auto">
-          {items.map((n) => (
+          {visibleItems.map((n) => (
             <div key={n.id} className="space-y-2 border-b p-4 last:border-b-0">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -85,7 +93,7 @@ export default function NotificationBell() {
               )}
             </div>
           ))}
-          {items.length === 0 && <div className="p-6 text-sm text-muted-foreground">Nenhuma notificação.</div>}
+          {visibleItems.length === 0 && <div className="p-6 text-sm text-muted-foreground">Nenhuma notificação.</div>}
         </div>
       </PopoverContent>
     </Popover>

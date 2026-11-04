@@ -160,6 +160,7 @@ export default function DashboardShell({
 }) {
   const { user } = useAuth();
   const { ownerUserId, membership } = useBusinessMembership();
+  const isAttendant = membership?.role === "attendant";
   const [currentAccountStatus, setCurrentAccountStatus] = useState(accountStatus || "trial");
   const [subscriptionExpiresAt, setSubscriptionExpiresAt] = useState<string | null>(null);
   const [trialExpiresAt, setTrialExpiresAt] = useState<string | null>(null);
@@ -273,7 +274,11 @@ export default function DashboardShell({
   }, [loadSidebarCounts, ownerUserId, user]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || isAttendant) {
+      setSubscriptionExpiresAt(null);
+      setTrialExpiresAt(null);
+      return;
+    }
     supabase
       .from("profiles")
       .select("account_status,subscription_expires_at,trial_expires_at")
@@ -284,9 +289,9 @@ export default function DashboardShell({
         setSubscriptionExpiresAt(data?.subscription_expires_at || null);
         setTrialExpiresAt(data?.trial_expires_at || null);
       });
-  }, [accountStatus, user]);
+  }, [accountStatus, isAttendant, user]);
 
-  const expiryTimestamp = currentAccountStatus === "trial" ? trialExpiresAt : subscriptionExpiresAt;
+  const expiryTimestamp = isAttendant ? null : currentAccountStatus === "trial" ? trialExpiresAt : subscriptionExpiresAt;
   const planDaysRemaining = expiryTimestamp
     ? Math.max(0, Math.ceil((new Date(expiryTimestamp).getTime() - Date.now()) / 86400000))
     : null;
@@ -343,15 +348,17 @@ export default function DashboardShell({
                 <Button variant="ghost" size="icon" className="hidden lg:inline-flex" title={sidebarCollapsed ? "Expandir menu" : "Recolher menu"} onClick={() => setSidebarCollapsed((value) => !value)}>
                   <PanelLeft className="h-4 w-4" />
                 </Button>
-                <span className="hidden items-center gap-1.5 text-xs font-medium text-muted-foreground sm:inline-flex">
-                  <span>Status</span>
-                  <span className={`h-2 w-2 rounded-full ${statusColor}`} />
-                  <span className="text-foreground">{statusLabel}</span>
-                </span>
+                {!isAttendant && (
+                  <span className="hidden items-center gap-1.5 text-xs font-medium text-muted-foreground sm:inline-flex">
+                    <span>Status</span>
+                    <span className={`h-2 w-2 rounded-full ${statusColor}`} />
+                    <span className="text-foreground">{statusLabel}</span>
+                  </span>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <NotificationBell />
+              <NotificationBell hideTrialNotifications={isAttendant} />
             </div>
           </div>
         </header>

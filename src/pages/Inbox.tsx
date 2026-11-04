@@ -45,6 +45,21 @@ import {
 import DateTimeSelect from "@/components/DateTimeSelect";
 
 const db = supabase as any;
+async function getFunctionErrorMessage(error: { message?: string; context?: unknown } | null, fallback: string) {
+  if (error?.context instanceof Response) {
+    try {
+      const body = await error.context.clone().json() as { error?: unknown; details?: unknown };
+      const summary = typeof body.error === "string" ? body.error.replaceAll("_", " ") : "";
+      const details = typeof body.details === "string" ? body.details : "";
+      const responseMessage = [summary, details].filter(Boolean).join(": ");
+      if (responseMessage) return responseMessage;
+    } catch {
+      // Fall back to the SDK error when the response is not JSON.
+    }
+  }
+  return error?.message || fallback;
+}
+
 type Conversation = {
   id: string;
   contact_id: string;
@@ -523,9 +538,10 @@ export default function Inbox() {
         body: { conversationId },
       });
       if (error || !data?.ok) {
+        const errorMessage = await getFunctionErrorMessage(error, data?.details || data?.error || "Tente novamente.");
         toast({
           title: "Não foi possível marcar a conversa como lida",
-          description: error?.message || data?.details || data?.error || "Tente novamente.",
+          description: errorMessage,
           variant: "destructive",
         });
         return;
