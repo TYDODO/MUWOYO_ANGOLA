@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import DashboardShell from "@/components/DashboardShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -18,6 +18,7 @@ import DateTimeSelect from "@/components/DateTimeSelect";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { useBusinessMembership } from "@/hooks/useBusinessMembership";
 import { Phone, User, Clock, History } from "lucide-react";
 import { addMonths, eachDayOfInterval, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, isToday, startOfMonth, startOfWeek, subMonths, startOfDay, isBefore, compareAsc, compareDesc } from "date-fns";
 
@@ -96,6 +97,7 @@ function scheduleErrorMessage(error: { code?: string; message?: string }) {
 export default function Schedule() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { ownerUserId, loading: membershipLoading } = useBusinessMembership();
   
   const [rows, setRows] = useState<Appt[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -104,22 +106,24 @@ export default function Schedule() {
   const [saving, setSaving] = useState(false);
   const [manualForm, setManualForm] = useState({ customer_name: "", customer_phone: "", service: "", description: "", scheduled_at: "", status: "confirmed" });
 
-  const load = async () => {
-    if (!user) return;
+  const load = useCallback(async () => {
+    if (!user || membershipLoading) return;
+    const dataUserId = ownerUserId || user.id;
     const { data, error } = await supabase
       .from("appointments")
       .select("*")
-      .eq("user_id", user.id)
+      .eq("user_id", dataUserId)
       .order("scheduled_at", { ascending: true });
     if (error) {
       toast({ title: "Não foi possível carregar os agendamentos", description: scheduleErrorMessage(error), variant: "destructive" });
       return;
     }
-    setRows((data as any) || []);
-  };
+    setRows(data || []);
+  }, [membershipLoading, ownerUserId, toast, user]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || membershipLoading) return;
+    const dataUserId = ownerUserId || user.id;
 
     const syncExpiredAppointments = async () => {
       const { error } = await supabase.rpc("update_expired_appointments");
@@ -138,14 +142,14 @@ export default function Schedule() {
     const expirationRefresh = window.setInterval(() => void syncExpiredAppointments(), 60_000);
 
     const channel = supabase
-      .channel(`appts-${user.id}`)
+      .channel(`appts-${dataUserId}-${user.id}`)
       .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
           table: "appointments",
-          filter: `user_id=eq.${user.id}`,
+          filter: `user_id=eq.${dataUserId}`,
         },
         load,
       )
@@ -155,7 +159,7 @@ export default function Schedule() {
       window.clearInterval(expirationRefresh);
       supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [load, membershipLoading, ownerUserId, toast, user]);
 
   const addManualAppointment = async () => {
     if (!user || !manualForm.customer_name.trim() || !manualForm.scheduled_at) return;
@@ -306,7 +310,7 @@ export default function Schedule() {
     >
       <div className="space-y-6">
         <Card className="rounded-3xl bg-transparent shadow-none border-none min-h-auto sm:border-border sm:bg-card/90 sm:shadow-sm sm:min-h-[620px]">
-          <CardHeader className="hidden sm:flex sm:flex-row sm:items-center sm:justify-between">
+          <CardHeader className="flex flex-col gap-3 px-0 sm:flex-row sm:items-center sm:justify-between sm:px-6">
             <CardTitle>Minha Agenda</CardTitle>
             <Button onClick={() => setManualOpen(true)}>Novo agendamento</Button>
           </CardHeader>

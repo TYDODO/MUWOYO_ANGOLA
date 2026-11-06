@@ -43,7 +43,35 @@ Deno.serve(async (req) => {
     const { data: userData, error: userErr } = await supabase.auth.getUser();
     if (userErr || !userData.user) return json({ error: "Unauthorized" }, 401);
 
-    const userId = userData.user.id;
+    const actorUserId = userData.user.id;
+    let dataUserId = actorUserId;
+    let manageScope = "all";
+    const { data: member } = await admin
+      .from("business_members")
+      .select("id,business_id,role,status")
+      .eq("user_id", actorUserId)
+      .maybeSingle();
+    if (member?.role === "attendant") {
+      if (member.status !== "active") return json({ error: "attendant_not_active" }, 403);
+      const { data: managePermission } = await admin
+        .from("business_member_permissions")
+        .select("id,data_scope")
+        .eq("member_id", member.id)
+        .eq("permission", "campaigns.manage")
+        .eq("enabled", true)
+        .maybeSingle();
+      if (!managePermission) return json({ error: "campaign_permission_required" }, 403);
+      manageScope = managePermission.data_scope === "own" ? "own" : "all";
+      const { data: business, error: businessError } = await admin
+        .from("businesses")
+        .select("owner_id")
+        .eq("id", member.business_id)
+        .maybeSingle();
+      if (businessError || !business?.owner_id) return json({ error: "business_not_found" }, 404);
+      dataUserId = business.owner_id;
+    } else if (member && (member.role !== "owner" || member.status !== "active")) {
+      return json({ error: "business_membership_not_active" }, 403);
+    }
     const body = await req.json().catch(() => ({}));
     const campaignId = String(body?.campaignId || "");
 
@@ -51,12 +79,15 @@ Deno.serve(async (req) => {
 
     const { data: campaign } = await admin
       .from("campaigns")
-      .select("id,name,message_text,status")
+      .select("id,name,message_text,status,scheduled_at,created_by")
       .eq("id", campaignId)
-      .eq("user_id", userId)
+      .eq("user_id", dataUserId)
       .maybeSingle();
 
     if (!campaign) return json({ error: "campaign_not_found" }, 404);
+    if (manageScope === "own" && campaign.created_by !== actorUserId) {
+      return json({ error: "campaign_not_accessible" }, 403);
+    }
     if (campaign.status === "scheduled" && campaign.scheduled_at && new Date(campaign.scheduled_at).getTime() > Date.now()) {
       return json({ error: "campaign_not_due", scheduledAt: campaign.scheduled_at }, 409);
     }
@@ -65,7 +96,7 @@ Deno.serve(async (req) => {
       .from("campaign_contacts")
       .select("contact_id")
       .eq("campaign_id", campaignId)
-      .eq("user_id", userId)
+      .eq("user_id", dataUserId)
       .eq("status", "pending");
 
     if (!queue?.length) {
@@ -76,25 +107,25 @@ Deno.serve(async (req) => {
     const { data: contacts } = await admin
       .from("whatsapp_contacts")
       .select("id,name,phone_number")
-      .eq("user_id", userId)
+      .eq("user_id", dataUserId)
       .in("id", queue.map((item: { contact_id: string }) => item.contact_id));
 
     const { data: blocked } = await admin
       .from("blocked_contacts")
       .select("phone_number")
-      .eq("user_id", userId)
+      .eq("user_id", dataUserId)
       .eq("is_active", true);
 
     const blockedPhones = new Set((blocked || []).map((item: { phone_number: string }) => item.phone_number.replace(/\D/g, "")));
     const contactById = new Map((contacts || []).map((contact: { id: string; name: string | null; phone_number: string }) => [contact.id, contact]));
     const contactIds = (contacts || []).map((contact: { id: string }) => contact.id);
     const [{ data: metadata }, { data: tags }] = await Promise.all([
-      admin.from("crm_contact_metadata").select("contact_id,stage_id").eq("user_id", userId).in("contact_id", contactIds),
-      admin.from("crm_contact_tags").select("contact_id,tag_id,crm_tags(name)").eq("user_id", userId).in("contact_id", contactIds),
+      admin.from("crm_contact_metadata").select("contact_id,stage_id").eq("user_id", dataUserId).in("contact_id", contactIds),
+      admin.from("crm_contact_tags").select("contact_id,tag_id,crm_tags(name)").eq("user_id", dataUserId).in("contact_id", contactIds),
     ]);
     const stageIds = (metadata || []).map((item: { stage_id: string | null }) => item.stage_id).filter(Boolean);
     const { data: stages } = stageIds.length
-      ? await admin.from("crm_stages").select("id,name").eq("user_id", userId).in("id", stageIds)
+      ? await admin.from("crm_stages").select("id,name").eq("user_id", dataUserId).in("id", stageIds)
       : { data: [] };
     const stageById = new Map((stages || []).map((stage: { id: string; name: string }) => [stage.id, stage.name]));
     const metadataByContact = new Map((metadata || []).map((item: { contact_id: string; stage_id: string | null }) => [item.contact_id, item]));
@@ -104,7 +135,7 @@ Deno.serve(async (req) => {
       if (tagName) tagsByContact.set(item.contact_id, [...(tagsByContact.get(item.contact_id) || []), tagName]);
     }
 
-    const { data: instanceRow } = await admin.from("instances").select("instance_name").eq("user_id", userId).maybeSingle();
+    const { data: instanceRow } = await admin.from("instances").select("instance_name").eq("user_id", dataUserId).maybeSingle();
     const instanceName = instanceRow?.instance_name as string | undefined;
     if (!instanceName) return json({ error: "whatsapp_instance_not_connected" }, 400);
 
@@ -148,7 +179,7 @@ Deno.serve(async (req) => {
       if (sent.ok) {
         sentCount += 1;
         await admin.from("messages").insert({
-          user_id: userId,
+          user_id: dataUserId,
           phone_number: clean,
           message_text: messageText,
           direction: "outbound",

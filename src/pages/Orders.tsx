@@ -83,7 +83,7 @@ function normalizeOrderItems(value: unknown): Record<string, unknown>[] {
 
 export default function Orders() {
   const { user } = useAuth();
-  const { isOwner, membership } = useBusinessMembership();
+  const { isOwner, membership, ownerUserId, loading: membershipLoading } = useBusinessMembership();
   const { toast } = useToast();
   const [rows, setRows] = useState<Order[]>([]);
   const [deliveryPeople, setDeliveryPeople] = useState<DeliveryPerson[]>([]);
@@ -104,11 +104,12 @@ export default function Orders() {
   const [statusFilter, setStatusFilter] = useState("all");
 
   const load = useCallback(async () => {
-    if (!user) return;
+    if (!user || membershipLoading) return;
+    const dataUserId = ownerUserId || user.id;
     const { data, error } = await supabase
       .from("store_orders")
       .select("*")
-      .eq("user_id", user.id)
+      .eq("user_id", dataUserId)
       .order("created_at", { ascending: false });
     if (error) {
       toast({ title: "Não foi possível carregar os pedidos", description: error.message, variant: "destructive" });
@@ -153,20 +154,21 @@ export default function Orders() {
         setAssignments({});
       }
     }
-  }, [isOwner, membership?.business_id, toast, user]);
+  }, [isOwner, membership?.business_id, membershipLoading, ownerUserId, toast, user]);
 
   useEffect(() => {
-    load();
-    if (!user) return;
+    void load();
+    if (!user || membershipLoading) return;
+    const dataUserId = ownerUserId || user.id;
     const ch = supabase
-      .channel(`orders-${user.id}`)
+      .channel(`orders-${dataUserId}-${user.id}`)
       .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
           table: "store_orders",
-          filter: `user_id=eq.${user.id}`,
+          filter: `user_id=eq.${dataUserId}`,
         },
         load,
       )
@@ -174,7 +176,7 @@ export default function Orders() {
     return () => {
       supabase.removeChannel(ch);
     };
-  }, [load, user]);
+  }, [load, membershipLoading, ownerUserId, user]);
 
   const updateStatus = async (id: string, status: string) => {
     const { error } = await supabase.from("store_orders").update({

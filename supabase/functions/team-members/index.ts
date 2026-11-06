@@ -11,7 +11,12 @@ const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SEND_VERIFICATION_URL = `${SUPABASE_URL}/functions/v1/send-verification-code`;
 const admin = createClient(SUPABASE_URL, SERVICE_KEY);
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-const permissions = ["inbox.view", "inbox.send", "inbox.assign", "inbox.view_unassigned", "inbox.manage", "contacts.view", "contacts.edit", "contacts.delete", "crm.view", "crm.edit", "crm.manage", "orders.view", "orders.create", "orders.edit", "orders.delete", "agenda.view", "agenda.create", "agenda.edit", "agenda.delete", "products.view", "products.create", "products.edit", "products.delete"];
+const permissions = ["inbox.view", "inbox.send", "inbox.assign", "inbox.view_unassigned", "inbox.manage", "contacts.view", "contacts.edit", "contacts.delete", "crm.view", "crm.edit", "crm.manage", "campaigns.view", "campaigns.manage", "orders.view", "orders.create", "orders.edit", "orders.delete", "agenda.view", "agenda.create", "agenda.edit", "agenda.delete", "products.view", "products.create", "products.edit", "products.delete"];
+const normalizePermissions = (items: unknown[]) => {
+  const selected = [...new Set(items.map(String).filter((item) => permissions.includes(item)))];
+  if (selected.includes("campaigns.manage") && !selected.includes("campaigns.view")) selected.push("campaigns.view");
+  return selected;
+};
 const permissionRow = (businessId: string, memberId: string, permission: string, scopes: Record<string, unknown> = {}) => ({
   business_id: businessId,
   member_id: memberId,
@@ -81,7 +86,7 @@ Deno.serve(async (req) => {
       const user = created.data.user;
       const { data: member, error: memberError } = await admin.from("business_members").insert({ business_id: businessId, user_id: user.id, role: "attendant", status: "pending", name, email }).select("id").single();
       if (memberError) { await admin.auth.admin.deleteUser(user.id); return json({ error: memberError.message }, 400); }
-      const selected = Array.isArray(body.permissions) ? body.permissions.filter((item: unknown) => permissions.includes(String(item))) : ["inbox.view", "inbox.send"];
+      const selected = normalizePermissions(Array.isArray(body.permissions) ? body.permissions : ["inbox.view", "inbox.send"]);
       if (selected.length) {
         const { error: permissionError } = await admin.from("business_member_permissions").insert(selected.map((permission: string) => permissionRow(businessId, member.id, permission, body.permission_scopes || {})));
         if (permissionError) {
@@ -105,7 +110,7 @@ Deno.serve(async (req) => {
       return verification.ok ? json({ ok: true }) : json({ error: verification.error || "verification_email_failed" }, 502);
     }
     if (action === "permissions") {
-      const selected = Array.isArray(body.permissions) ? body.permissions.map(String).filter((item: string) => permissions.includes(item)) : [];
+      const selected = normalizePermissions(Array.isArray(body.permissions) ? body.permissions : []);
       const scopes = body.permission_scopes && typeof body.permission_scopes === "object" ? body.permission_scopes as Record<string, unknown> : {};
       await admin.from("business_member_permissions").delete().eq("member_id", memberId);
       if (selected.length) await admin.from("business_member_permissions").insert(selected.map((permission: string) => permissionRow(businessId, memberId, permission, scopes)));

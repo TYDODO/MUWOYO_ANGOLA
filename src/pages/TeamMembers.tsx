@@ -17,6 +17,7 @@ const permissionOptions = [
   ["inbox.view", "Ver conversas"], ["inbox.send", "Enviar mensagens"], ["inbox.assign", "Atribuir conversas"], ["inbox.view_unassigned", "Ver conversas sem responsável"], ["inbox.manage", "Gerir conversas"],
   ["contacts.view", "Ver contactos"], ["contacts.edit", "Editar contactos"], ["contacts.delete", "Eliminar contactos"],
   ["crm.view", "Ver CRM"], ["crm.edit", "Editar CRM"], ["crm.manage", "Gerir etapas e etiquetas"],
+  ["campaigns.view", "Ver campanhas"], ["campaigns.manage", "Gerir e enviar campanhas"],
   ["orders.view", "Ver pedidos"], ["orders.create", "Criar pedidos"], ["orders.edit", "Editar pedidos"], ["orders.delete", "Eliminar pedidos"],
   ["agenda.view", "Ver agendamentos"], ["agenda.create", "Criar agendamentos"], ["agenda.edit", "Editar agendamentos"], ["agenda.delete", "Eliminar agendamentos"],
   ["products.view", "Ver produtos"], ["products.create", "Criar produtos"], ["products.edit", "Editar produtos"], ["products.delete", "Eliminar produtos"],

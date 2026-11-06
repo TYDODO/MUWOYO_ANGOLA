@@ -21,6 +21,7 @@ type AssignedConversation = {
 const modules = [
   { path: "/inbox", permission: "inbox.view", label: "Abrir Inbox" },
   { path: "/crm", permission: "crm.view", label: "Contactos" },
+  { path: "/campanhas", permission: "campaigns.view", label: "Campanhas" },
   { path: "/pedidos", permission: "orders.view", label: "Pedidos" },
   { path: "/agenda", permission: "agenda.view", label: "Agenda" },
   { path: "/produtos", permission: "products.view", label: "Produtos" },

@@ -79,7 +79,7 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
     );
   }
   if ((role === "attendant" || membership?.role === "attendant") && location.pathname !== "/atendente") {
-    const permissionByPath: Record<string, string> = { "/inbox": "inbox.view", "/whatsapp": "contacts.view", "/crm": "crm.view", "/pedidos": "orders.view", "/agenda": "agenda.view", "/produtos": "products.view" };
+    const permissionByPath: Record<string, string> = { "/inbox": "inbox.view", "/whatsapp": "contacts.view", "/crm": "crm.view", "/campanhas": "campaigns.view", "/pedidos": "orders.view", "/agenda": "agenda.view", "/produtos": "products.view" };
     const permission = Object.entries(permissionByPath).find(([path]) => location.pathname === path || location.pathname.startsWith(`${path}/`))?.[1];
     if (!permission || !hasPermission(permission)) return <Navigate to="/atendente" replace />;
   }

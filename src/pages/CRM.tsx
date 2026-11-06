@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DashboardShell from "@/components/DashboardShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useBusinessMembership } from "@/hooks/useBusinessMembership";
 
 const db = supabase as any;
 const PAGE_SIZE = 25;
@@ -57,6 +58,8 @@ const activityLabels: Record<string, string> = {
 
 export default function CRM() {
   const { user } = useAuth();
+  const { ownerUserId, permissions, loading: membershipLoading, isOwner } = useBusinessMembership();
+  const dataUserId = ownerUserId || user?.id || null;
   const { toast } = useToast();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [stages, setStages] = useState<Stage[]>([]);
@@ -80,29 +83,53 @@ export default function CRM() {
   const [readTrackingAvailable, setReadTrackingAvailable] = useState(true);
   const readTrackingNoticeShown = useRef(false);
 
-  const load = async () => {
-    if (!user) return;
-    const { data: instance } = await db.from("instances").select("id,instance_name").eq("user_id", user.id).eq("status", "connected").order("created_at", { ascending: false }).limit(1).maybeSingle();
+  const load = useCallback(async () => {
+    if (membershipLoading) return;
+    if (!user || !dataUserId || (!isOwner && !permissions.includes("crm.view"))) {
+      setActiveInstance(null);
+      setContacts([]);
+      setStages([]);
+      setTags([]);
+      return;
+    }
+    const { data: instance, error: instanceError } = await db.from("instances").select("id,instance_name").eq("user_id", dataUserId).eq("status", "connected").order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (instanceError) {
+      toast({ title: "Não foi possível carregar o WhatsApp do negócio", description: instanceError.message, variant: "destructive" });
+      return;
+    }
     setActiveInstance(instance || null);
     if (!instance) { setContacts([]); setStages([]); setTags([]); return; }
-    const [contactResult, stageResult, tagResult, { data: metadataRows }, { data: tagLinks }] = await Promise.all([
-      db.from("whatsapp_contacts").select("id,name,phone_number,crm_viewed_at,last_message_at,created_at,is_group").eq("user_id", user.id).eq("whatsapp_instance_id", instance.id).eq("is_group", false).order("last_message_at", { ascending: false, nullsFirst: false }),
-      db.from("crm_stages").select("id,name,position,color").eq("user_id", user.id).order("position"),
-      db.from("crm_tags").select("id,name,color").eq("user_id", user.id).order("name"),
-      db.from("crm_contact_metadata").select("contact_id,stage_id,owner_id,notes").eq("user_id", user.id),
-      db.from("crm_contact_tags").select("contact_id,tag_id").eq("user_id", user.id),
+    const [contactResult, stageResult, tagResult, metadataResult, tagLinksResult] = await Promise.all([
+      db.from("whatsapp_contacts").select("id,name,phone_number,crm_viewed_at,last_message_at,created_at,is_group").eq("user_id", dataUserId).eq("whatsapp_instance_id", instance.id).eq("is_group", false).order("last_message_at", { ascending: false, nullsFirst: false }),
+      db.from("crm_stages").select("id,name,position,color").eq("user_id", dataUserId).order("position"),
+      db.from("crm_tags").select("id,name,color").eq("user_id", dataUserId).order("name"),
+      db.from("crm_contact_metadata").select("contact_id,stage_id,owner_id,notes").eq("user_id", dataUserId),
+      db.from("crm_contact_tags").select("contact_id,tag_id").eq("user_id", dataUserId),
     ]);
     const [{ data: contactFallback }, { data: stageFallback }, { data: tagFallback }] = await Promise.all([
       isMissingViewedAtColumn(contactResult.error)
-        ? db.from("whatsapp_contacts").select("id,name,phone_number,last_message_at,created_at,is_group").eq("user_id", user.id).eq("whatsapp_instance_id", instance.id).eq("is_group", false).order("last_message_at", { ascending: false, nullsFirst: false })
+        ? db.from("whatsapp_contacts").select("id,name,phone_number,last_message_at,created_at,is_group").eq("user_id", dataUserId).eq("whatsapp_instance_id", instance.id).eq("is_group", false).order("last_message_at", { ascending: false, nullsFirst: false })
         : Promise.resolve({ data: null }),
       stageResult.error && isMissingColorColumn(stageResult.error)
-        ? db.from("crm_stages").select("id,name,position").eq("user_id", user.id).order("position")
+        ? db.from("crm_stages").select("id,name,position").eq("user_id", dataUserId).order("position")
         : Promise.resolve({ data: null }),
       tagResult.error && isMissingColorColumn(tagResult.error)
-        ? db.from("crm_tags").select("id,name").eq("user_id", user.id).order("name")
+        ? db.from("crm_tags").select("id,name").eq("user_id", dataUserId).order("name")
         : Promise.resolve({ data: null }),
     ]);
+    const loadError = [
+      contactResult.error && !isMissingViewedAtColumn(contactResult.error) ? contactResult.error : null,
+      stageResult.error && !isMissingColorColumn(stageResult.error) ? stageResult.error : null,
+      tagResult.error && !isMissingColorColumn(tagResult.error) ? tagResult.error : null,
+      metadataResult.error,
+      tagLinksResult.error,
+    ].find(Boolean);
+    if (loadError) {
+      toast({ title: "Não foi possível carregar os dados do CRM", description: loadError.message, variant: "destructive" });
+      return;
+    }
+    const metadataRows = metadataResult.data;
+    const tagLinks = tagLinksResult.data;
     const contactRows = contactResult.data || contactFallback || [];
     const trackingAvailable = !isMissingViewedAtColumn(contactResult.error);
     setReadTrackingAvailable(trackingAvailable);
@@ -126,9 +153,9 @@ export default function CRM() {
       const metadata = metadataMap.get(contact.id);
       return { ...contact, metadata, stage: metadata?.stage_id ? stageMap.get(metadata.stage_id) : undefined, tags: contactTags.get(contact.id) || [] };
     }));
-  };
+  }, [dataUserId, isOwner, membershipLoading, permissions, toast, user]);
 
-  useEffect(() => { void load(); }, [user]);
+  useEffect(() => { void load(); }, [load]);
 
   const filtered = useMemo(() => contacts.filter((contact) => {
     const matchesSearch = `${contact.name || ""} ${contact.phone_number}`.toLowerCase().includes(search.toLowerCase());
@@ -150,11 +177,11 @@ export default function CRM() {
     const viewedContact = { ...contact, crm_viewed_at: viewedAt };
     setSelected(viewedContact);
     setNotes(contact.metadata?.notes || "");
-    if (!contact.crm_viewed_at && user && readTrackingAvailable) {
+    if (!contact.crm_viewed_at && user && dataUserId && readTrackingAvailable && (isOwner || permissions.includes("contacts.edit"))) {
       const { error } = await db.from("whatsapp_contacts")
         .update({ crm_viewed_at: viewedAt })
         .eq("id", contact.id)
-        .eq("user_id", user.id);
+        .eq("user_id", dataUserId);
       if (error) {
         toast({ title: "Não foi possível marcar o contacto como visualizado", description: error.message, variant: "destructive" });
         setSelected(contact);
@@ -163,15 +190,15 @@ export default function CRM() {
       }
     }
     if (!user) return;
-    const { data } = await db.from("crm_activities").select("id,activity_type,description,created_at").eq("user_id", user.id).eq("contact_id", contact.id).order("created_at", { ascending: false }).limit(50);
+    const { data } = await db.from("crm_activities").select("id,activity_type,description,created_at").eq("user_id", dataUserId).eq("contact_id", contact.id).order("created_at", { ascending: false }).limit(50);
     setActivities(data || []);
   };
 
   const updateContact = async (patch: Record<string, unknown>, description: string) => {
-    if (!user || !selected) return;
+    if (!dataUserId || !selected || (!isOwner && !permissions.includes("crm.edit"))) return;
     setSaving(true);
-    const { error } = await db.from("crm_contact_metadata").upsert({ contact_id: selected.id, user_id: user.id, ...patch }, { onConflict: "contact_id" });
-    if (!error) await db.from("crm_activities").insert({ user_id: user.id, contact_id: selected.id, activity_type: "crm_updated", description });
+    const { error } = await db.from("crm_contact_metadata").upsert({ contact_id: selected.id, user_id: dataUserId, ...patch }, { onConflict: "contact_id" });
+    if (!error) await db.from("crm_activities").insert({ user_id: dataUserId, contact_id: selected.id, activity_type: "crm_updated", description });
     setSaving(false);
     if (error) return toast({ title: "Não foi possível atualizar o contacto", description: error.message, variant: "destructive" });
     await load();
@@ -180,23 +207,23 @@ export default function CRM() {
   };
 
   const toggleTag = async (tag: Tag) => {
-    if (!user || !selected) return;
+    if (!dataUserId || !selected || (!isOwner && !permissions.includes("crm.edit"))) return;
     const hasTag = selected.tags.some((item) => item.id === tag.id);
     const result = hasTag
-      ? await db.from("crm_contact_tags").delete().eq("user_id", user.id).eq("contact_id", selected.id).eq("tag_id", tag.id)
-      : await db.from("crm_contact_tags").insert({ user_id: user.id, contact_id: selected.id, tag_id: tag.id });
+      ? await db.from("crm_contact_tags").delete().eq("user_id", dataUserId).eq("contact_id", selected.id).eq("tag_id", tag.id)
+      : await db.from("crm_contact_tags").insert({ user_id: dataUserId, contact_id: selected.id, tag_id: tag.id });
     if (result.error) return toast({ title: "Não foi possível atualizar as tags", description: result.error.message, variant: "destructive" });
     await load();
     setSelected((current) => current ? { ...current, tags: hasTag ? current.tags.filter((item) => item.id !== tag.id) : [...current.tags, tag] } : current);
   };
 
   const saveCategory = async () => {
-    if (!user || !newCategory.name.trim()) return;
+    if (!dataUserId || !newCategory.name.trim() || (!isOwner && !permissions.includes("crm.manage"))) return;
     setSavingCategory(true);
     const table = categoryType === "stage" ? "crm_stages" : "crm_tags";
     const payload = categoryType === "stage"
-      ? { user_id: user.id, name: newCategory.name.trim(), position: stages.reduce((max, stage) => Math.max(max, stage.position), 0) + 1, color: newCategory.color }
-      : { user_id: user.id, name: newCategory.name.trim(), color: newCategory.color };
+      ? { user_id: dataUserId, name: newCategory.name.trim(), position: stages.reduce((max, stage) => Math.max(max, stage.position), 0) + 1, color: newCategory.color }
+      : { user_id: dataUserId, name: newCategory.name.trim(), color: newCategory.color };
     let result = await db.from(table).insert(payload);
     const missingColor = isMissingColorColumn(result.error);
     if (missingColor) {
@@ -217,9 +244,9 @@ export default function CRM() {
   };
 
   const updateCategory = async (type: "stage" | "tag", item: Stage | Tag, patch: { name?: string; color?: string }) => {
-    if (!user) return;
+    if (!dataUserId || (!isOwner && !permissions.includes("crm.manage"))) return;
     const table = type === "stage" ? "crm_stages" : "crm_tags";
-    const { error } = await db.from(table).update(patch).eq("id", item.id).eq("user_id", user.id);
+    const { error } = await db.from(table).update(patch).eq("id", item.id).eq("user_id", dataUserId);
     if (error) {
       toast({
         title: "Não foi possível atualizar a categoria",
@@ -239,9 +266,9 @@ export default function CRM() {
   };
 
   const deleteCategory = async (type: "stage" | "tag", item: Stage | Tag) => {
-    if (!user || !window.confirm(`Eliminar ${type === "stage" ? "a etapa" : "a etiqueta"} "${item.name}"?`)) return;
+    if (!dataUserId || (!isOwner && !permissions.includes("crm.manage")) || !window.confirm(`Eliminar ${type === "stage" ? "a etapa" : "a etiqueta"} "${item.name}"?`)) return;
     const table = type === "stage" ? "crm_stages" : "crm_tags";
-    const { error } = await db.from(table).delete().eq("id", item.id).eq("user_id", user.id);
+    const { error } = await db.from(table).delete().eq("id", item.id).eq("user_id", dataUserId);
     if (error) {
       toast({ title: "Não foi possível eliminar a categoria", description: error.message, variant: "destructive" });
       return;
@@ -266,12 +293,12 @@ export default function CRM() {
   };
 
   const addManualContact = async () => {
-    if (!user || !manualContact.phone_number.trim()) return;
+    if (!dataUserId || !manualContact.phone_number.trim() || (!isOwner && !permissions.includes("contacts.edit"))) return;
     const phone = manualContact.phone_number.replace(/\D/g, "");
     if (!activeInstance) return toast({ title: "WhatsApp não conectado", description: "Conecte um WhatsApp antes de adicionar contactos.", variant: "destructive" });
-    const { data, error } = await db.from("whatsapp_contacts").upsert({ user_id: user.id, instance_name: activeInstance.instance_name, whatsapp_instance_id: activeInstance.id, canonical_remote_jid: `${phone}@s.whatsapp.net`, remote_jid: `${phone}@s.whatsapp.net`, identity_type: "phone", identity_status: "resolved", name: manualContact.name.trim() || null, phone_number: phone, should_respond: true }, { onConflict: "user_id,instance_name,phone_number", ignoreDuplicates: false }).select("id").single();
+    const { data, error } = await db.from("whatsapp_contacts").upsert({ user_id: dataUserId, instance_name: activeInstance.instance_name, whatsapp_instance_id: activeInstance.id, canonical_remote_jid: `${phone}@s.whatsapp.net`, remote_jid: `${phone}@s.whatsapp.net`, identity_type: "phone", identity_status: "resolved", name: manualContact.name.trim() || null, phone_number: phone, should_respond: true }, { onConflict: "user_id,instance_name,phone_number", ignoreDuplicates: false }).select("id").single();
     if (error) return toast({ title: "Não foi possível guardar o contacto", description: error.message, variant: "destructive" });
-    await db.from("crm_activities").insert({ user_id: user.id, contact_id: data.id, activity_type: "contact_created", description: "Contacto adicionado manualmente" });
+    await db.from("crm_activities").insert({ user_id: dataUserId, contact_id: data.id, activity_type: "contact_created", description: "Contacto adicionado manualmente" });
     setManualContact({ name: "", phone_number: "" });
     setManualOpen(false);
     await load();
@@ -279,8 +306,8 @@ export default function CRM() {
   };
 
   const deleteContact = async () => {
-    if (!user || !selected || !window.confirm("Eliminar este contacto?")) return;
-    const { error } = await db.from("whatsapp_contacts").delete().eq("id", selected.id).eq("user_id", user.id);
+    if (!dataUserId || !selected || (!isOwner && !permissions.includes("contacts.delete")) || !window.confirm("Eliminar este contacto?")) return;
+    const { error } = await db.from("whatsapp_contacts").delete().eq("id", selected.id).eq("user_id", dataUserId);
     if (error) return toast({ title: "Não foi possível eliminar", description: error.message, variant: "destructive" });
     setSelected(null);
     await load();
@@ -288,7 +315,7 @@ export default function CRM() {
 
   return (
     <DashboardShell title="CRM" description="Organize contactos, oportunidades e histórico do negócio.">
-      <div className="flex items-center justify-between gap-3"><div><h2 className="text-xl font-semibold">Centro de clientes</h2><p className="text-sm text-muted-foreground">Gerencie contactos e acompanhe cada oportunidade.</p></div><Button onClick={() => setManualOpen(true)}>+ Novo contacto</Button></div>
+      <div className="flex items-center justify-between gap-3"><div><h2 className="text-xl font-semibold">Centro de clientes</h2><p className="text-sm text-muted-foreground">Gerencie contactos e acompanhe cada oportunidade.</p></div>{(isOwner || permissions.includes("contacts.edit")) && <Button onClick={() => setManualOpen(true)}>+ Novo contacto</Button>}</div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[["Contactos", contacts.length, "Todos os contactos"], ["Leads", leadCount, "Novos contactos"], ["Interessados", interestedCount, "Em negociação"], ["Clientes", customerCount, "Oportunidades ganhas"]].map(([label, value, caption]) => <Card key={String(label)}><CardContent className="p-5"><p className="text-sm text-muted-foreground">{label}</p><p className="mt-2 text-3xl font-semibold">{value}</p><p className="mt-1 text-xs text-muted-foreground">{caption}</p></CardContent></Card>)}
       </div>
@@ -297,8 +324,8 @@ export default function CRM() {
         <Input className="lg:max-w-md" placeholder="Pesquisar nome ou telefone" value={search} onChange={(event) => setSearch(event.target.value)} />
         <Select value={stageFilter} onValueChange={setStageFilter}><SelectTrigger className="lg:w-48"><SelectValue placeholder="Todas as etapas" /></SelectTrigger><SelectContent><SelectItem value="all">Todas as etapas</SelectItem>{stages.map((stage) => <SelectItem key={stage.id} value={stage.id}>{stage.name}</SelectItem>)}</SelectContent></Select>
         <Select value={tagFilter} onValueChange={setTagFilter}><SelectTrigger className="lg:w-48"><SelectValue placeholder="Todas as tags" /></SelectTrigger><SelectContent><SelectItem value="all">Todas as tags</SelectItem>{tags.map((tag) => <SelectItem key={tag.id} value={tag.id}>{tag.name}</SelectItem>)}</SelectContent></Select>
-        <Button variant="outline" className="lg:ml-auto" onClick={() => setManualOpen(true)}>Adicionar contacto</Button>
-        <Button variant="outline" onClick={() => setCategoryManagerOpen(true)}>Gerir categorias</Button>
+        {(isOwner || permissions.includes("contacts.edit")) && <Button variant="outline" className="lg:ml-auto" onClick={() => setManualOpen(true)}>Adicionar contacto</Button>}
+        {(isOwner || permissions.includes("crm.manage")) && <Button variant="outline" onClick={() => setCategoryManagerOpen(true)}>Gerir categorias</Button>}
         <Button variant="outline" onClick={() => setKanban((value) => !value)}>{kanban ? "Ver lista" : "Ver Kanban"}</Button>
       </div>
 

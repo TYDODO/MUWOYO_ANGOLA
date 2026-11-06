@@ -45,7 +45,7 @@ const groups = [
   ] },
   { title: "Crescimento", items: [
     { title: "Follow Up", to: "/follow-up", icon: Workflow, ownerOnly: true },
-    { title: "Campanhas", to: "/campanhas", icon: Megaphone, ownerOnly: true },
+    { title: "Campanhas", to: "/campanhas", icon: Megaphone, permission: "campaigns.view" },
   ] },
   { title: "Catálogo", items: [
     { title: "Produtos", to: "/produtos", icon: Boxes, permission: "products.view" },
