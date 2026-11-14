@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { MessageSquare, Check } from "lucide-react";
 import { isSupabaseConfigured, supabase } from "@/integrations/supabase/client";
+import { trackMetaEvent } from "@/lib/meta-pixel";
 
 type TopUpPack = {
   id: string;
@@ -129,7 +130,7 @@ export const MessagePacks = () => {
                     : "bg-secondary hover:bg-secondary/80 text-foreground"
                 }`}
               >
-                {p.name === "Enterprise" ? <a href="https://wa.me/244962011401" target="_blank" rel="noreferrer">Falar com suporte</a> : <Link to="/login">Pagar este plano</Link>}
+                {p.name === "Enterprise" ? <a href="https://wa.me/244962011401" target="_blank" rel="noreferrer" onClick={() => trackMetaEvent("Contact")}>Falar com suporte</a> : <Link to="/login">Pagar este plano</Link>}
               </Button>
             </div>
           ))}

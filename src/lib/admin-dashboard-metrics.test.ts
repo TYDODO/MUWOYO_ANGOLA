@@ -49,7 +49,7 @@ describe("buildAdminDashboardMetrics", () => {
     ];
 
     const subscriptions = [
-      { user_id: "u1", status: "expired", confirmed_at: "2026-09-05T00:00:00.000Z", expires_at: "2026-10-05T00:00:00.000Z", plan_price_kz: 15000 },
+      { user_id: "u1", status: "expired", confirmed_at: "2026-09-05T00:00:00.000Z", expires_at: "2026-10-05T00:00:00.000Z", plan_price_kz: 15000, amount_kz: 30000 },
       { user_id: "u1", status: "active", confirmed_at: "2026-09-20T00:00:00.000Z", expires_at: "2026-11-20T00:00:00.000Z", plan_price_kz: 21000 },
       { user_id: "u2", status: "pending", confirmed_at: null, plan_price_kz: 20000 },
       { user_id: "u3", status: "active", confirmed_at: "2026-09-25T00:00:00.000Z", expires_at: "2026-11-25T00:00:00.000Z", plan_price_kz: 10000 },
@@ -82,6 +82,6 @@ describe("buildAdminDashboardMetrics", () => {
     expect(result.recentPayingCustomers).toBe(3);
     expect(result.repeatBuyers).toBe(1);
     expect(result.creditDepleted).toBe(2);
-    expect(result.estimatedPlanValue).toBe(78000);
+    expect(result.confirmedPlanRevenue).toBe(93000);
   });
 });

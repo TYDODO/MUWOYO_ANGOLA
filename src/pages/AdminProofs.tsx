@@ -16,6 +16,8 @@ type PaymentProof = {
   proof_path: string | null;
   submitted_at: string;
   status: string;
+  purchase_months: number;
+  amount_kz: number;
   rejection_reason: string | null;
   plan?: { name: string; price_kz: number };
   profile?: { full_name: string | null; email: string | null; phone: string | null };
@@ -47,7 +49,7 @@ export default function AdminProofs() {
     const subscriptions: PaymentProof[] = [];
     for (let from = 0; ; from += 500) {
       const { data, error } = await supabase.from("plan_subscriptions")
-        .select("id,user_id,plan_id,payment_id,proof_path,submitted_at,status,rejection_reason")
+        .select("id,user_id,plan_id,payment_id,proof_path,submitted_at,status,purchase_months,amount_kz,rejection_reason")
         .order("submitted_at", { ascending: false })
         .range(from, from + 499);
       if (error) {
@@ -103,7 +105,9 @@ export default function AdminProofs() {
       toast({ title: "Não foi possível confirmar", description: data?.error || error?.message || "A operação foi recusada.", variant: "destructive" });
       return;
     }
-    toast({ title: "Pagamento confirmado", description: `O plano ${row.plan?.name || "selecionado"} foi ativado por 30 dias.` });
+    const months = Number(data?.purchase_months || row.purchase_months || 1);
+    const amount = Number(data?.amount_kz ?? row.amount_kz ?? 0);
+    toast({ title: "Pagamento confirmado", description: `${row.plan?.name || "Plano"} por ${months} ${months === 1 ? "mês" : "meses"} · ${amount.toLocaleString("pt-AO")} Kz.` });
     setBusyId("");
     await load();
   };
@@ -146,7 +150,7 @@ export default function AdminProofs() {
             <div key={row.id} className="flex flex-col gap-4 rounded-md border p-4 md:flex-row md:items-center md:justify-between">
               <div className="min-w-0">
                 <p className="font-semibold">{row.profile?.full_name || row.profile?.email || row.user_id}</p>
-                <p className="text-sm text-muted-foreground">{row.profile?.phone || row.profile?.email || "Sem contacto"} · {row.plan?.name || "Plano removido"} · {Number(row.plan?.price_kz || 0).toLocaleString("pt-AO")} Kz</p>
+                <p className="text-sm text-muted-foreground">{row.profile?.phone || row.profile?.email || "Sem contacto"} · {row.plan?.name || "Plano removido"} · {row.purchase_months} {row.purchase_months === 1 ? "mês" : "meses"} · total {Number(row.amount_kz || 0).toLocaleString("pt-AO")} Kz</p>
                 <p className="mt-1 text-xs text-muted-foreground">Payment ID {row.payment_id} · {statusLabel(row.status)} · enviado em {new Date(row.submitted_at).toLocaleString("pt-AO")}</p>
                 {row.status === "rejected" && row.rejection_reason && <p className="mt-2 rounded-md bg-destructive/5 p-2 text-sm text-destructive">Motivo da recusa: {row.rejection_reason}</p>}
               </div>

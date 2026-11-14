@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Zap, Shield, Clock, MessageCircle } from "lucide-react";
 import heroPhoneImage from "@/assets/muwoyo-chat.png";
+import { trackMetaEvent } from "@/lib/meta-pixel";
 
 interface Message {
   text: string;
@@ -191,6 +192,7 @@ export default function HeroSection() {
               variant="outline"
               className="border-emerald-500 text-emerald-500 hover:bg-emerald-50 rounded-full px-4 sm:px-6 font-bold text-sm sm:text-base py-3 sm:py-auto h-auto sm:h-10 min-h-[36px] sm:min-h-[36px]"
               onClick={() => {
+                trackMetaEvent("Contact");
                 const message = encodeURIComponent(
                   "Olá! Gostaria de saber como a Muwoyo funciona.",
                 );

@@ -18,6 +18,21 @@
     background: hsl(var(--accent));
   }
 
+  .inbox-reaction-trigger {
+    display: none;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .inbox-reaction-trigger {
+      display: flex;
+      opacity: 0;
+    }
+
+    .group:hover .inbox-reaction-trigger {
+      opacity: 1;
+    }
+  }
+
   @media (max-width: 1023px) {
     [data-inbox][data-has-selection="true"] > div:first-child {
       display: none;
@@ -30,8 +45,8 @@
     [data-inbox] {
       display: block;
       min-height: 0;
-      height: calc(100dvh - 0.5rem);
-      max-height: calc(100dvh - 0.5rem);
+      height: 100dvh;
+      max-height: 100dvh;
     }
 
     [data-inbox] > div {

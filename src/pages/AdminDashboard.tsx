@@ -151,14 +151,13 @@ export default function AdminDashboard() {
   }, [adminUser, search, filter]);
   
   const load = async (nextRange: RangeKey = range) => {
-    const [profileResult, subscriptionResult, instanceResult, roleResult, planResult, topUpResult, activityResult] = await Promise.all([
+    const [profileResult, subscriptionResult, instanceResult, roleResult, topUpResult, activityResult] = await Promise.all([
       sb.from("profiles").select(
         "user_id,full_name,email,phone,status,is_suspended,message_limit,messages_received,created_at,created_by,business_name,account_status,trial_started_at,trial_expires_at,acquisition_source,plan_id,subscription_expires_at,onboarding_completed,province",
       ).order("created_at", { ascending: false }),
-      sb.from("plan_subscriptions").select("user_id,plan_id,status,confirmed_at,submitted_at,expires_at").order("confirmed_at", { ascending: false }),
+      sb.from("plan_subscriptions").select("user_id,plan_id,status,confirmed_at,submitted_at,expires_at,amount_kz").order("confirmed_at", { ascending: false }),
       sb.from("instances").select("user_id,status,connection_state,automation_paused").order("updated_at", { ascending: false }),
       sb.from("user_roles").select("user_id,role"),
-      sb.from("subscription_plans").select("id,name,price_kz"),
       sb.from("top_up_requests").select("id,amount_kz,status,request_type,created_at,confirmed_at,approved_at").order("created_at", { ascending: false }),
       sb.from("notifications").select("id,title,message,type,created_at,link").order("created_at", { ascending: false }).limit(6),
     ]);
@@ -166,16 +165,11 @@ export default function AdminDashboard() {
     const { data: subscriptions, error: subscriptionsError } = subscriptionResult;
     const { data: instances, error: instancesError } = instanceResult;
     const { data: roles, error: rolesError } = roleResult;
-    const { data: planRows, error: plansError } = planResult;
     const { data: topUpRows, error: topUpsError } = topUpResult;
     const { data: activityRows, error: activityError } = activityResult;
-    const failedQueries = [profilesError, subscriptionsError, instancesError, rolesError, plansError, topUpsError, activityError].filter(Boolean);
+    const failedQueries = [profilesError, subscriptionsError, instancesError, rolesError, topUpsError, activityError].filter(Boolean);
     setLoadError(failedQueries.length ? failedQueries.map((query: any) => query.message).join(" · ") : "");
-    const planPrices = new Map((planRows || []).map((plan: any) => [plan.id, Number(plan.price_kz || 0)]));
-    const pricedSubscriptions = (subscriptions || []).map((subscription: any) => ({
-      ...subscription,
-      plan_price_kz: planPrices.get(subscription.plan_id) || 0,
-    }));
+    const pricedSubscriptions = subscriptions || [];
 
     const activeSubscriptionIds = new Set((subscriptions || []).filter((subscription: any) => subscription.status === "active" && (!subscription.expires_at || new Date(subscription.expires_at).getTime() > Date.now())).map((subscription: any) => subscription.user_id));
     const roleMap = new Map((roles || []).map((r: any) => [r.user_id, r.role]));
@@ -388,7 +382,7 @@ export default function AdminDashboard() {
         <Stat label="Clientes pagantes" value={metrics.paidCustomers} icon={<Wallet />} onClick={() => setFilter("all")} />
         <Stat label="Recompra" value={metrics.repeatBuyers} icon={<Coins />} onClick={() => setFilter("all")} />
         <Stat label="Créditos esgotados" value={metrics.creditDepleted} icon={<MessageSquarePlus />} onClick={() => setFilter("empty")} />
-        <Stat label="Valor estimado dos planos" value={`${metrics.estimatedPlanValue.toLocaleString("pt-AO")} Kz`} icon={<Coins />} onClick={() => setFilter("all")} />
+        <Stat label="Faturamento confirmado dos planos" value={`${metrics.confirmedPlanRevenue.toLocaleString("pt-AO")} Kz`} icon={<Coins />} onClick={() => setFilter("all")} />
       </div>
       {search.trim() && (
         <Card>

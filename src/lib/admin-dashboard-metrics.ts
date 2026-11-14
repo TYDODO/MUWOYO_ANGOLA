@@ -21,6 +21,7 @@ export type DashboardSubscription = {
   submitted_at?: string | null;
   expires_at?: string | null;
   plan_price_kz?: number | null;
+  amount_kz?: number | null;
 };
 
 export type DashboardInstance = {
@@ -43,7 +44,7 @@ export type DashboardMetrics = {
   recentPayingCustomers: number;
   repeatBuyers: number;
   creditDepleted: number;
-  estimatedPlanValue: number;
+  confirmedPlanRevenue: number;
 };
 
 function toDate(value: string | null | undefined): Date | null {
@@ -164,7 +165,10 @@ export function buildAdminDashboardMetrics({
   ).size;
 
   const creditDepleted = profiles.filter((profile) => Number(profile.message_limit || 0) - Number(profile.messages_received || 0) <= 0).length;
-  const estimatedPlanValue = confirmedSubscriptions.reduce((sum, subscription) => sum + Number(subscription.plan_price_kz || 0), 0);
+  const confirmedPlanRevenue = confirmedSubscriptions.reduce(
+    (sum, subscription) => sum + Number(subscription.amount_kz ?? subscription.plan_price_kz ?? 0),
+    0,
+  );
 
   return {
     totalUsers,
@@ -179,6 +183,6 @@ export function buildAdminDashboardMetrics({
     recentPayingCustomers: recentPayingCustomerIds.size,
     repeatBuyers,
     creditDepleted,
-    estimatedPlanValue,
+    confirmedPlanRevenue,
   };
 }

@@ -1,4 +1,5 @@
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { openMetaPixelPreferences } from "@/lib/meta-pixel";
 
 export function PrivacyPolicyViewer() {
   return (
@@ -9,7 +10,7 @@ export function PrivacyPolicyViewer() {
               Política de Privacidade
             </h1>
             <p className="text-center text-gray-600 mt-2">
-              Última atualização: 22 Agosto de 2026
+              Última atualização: 10 Novembro de 2026
             </p>
           </header>
             <ScrollArea className="h-[600px] w-full p-0">
@@ -157,10 +158,18 @@ export function PrivacyPolicyViewer() {
                     8. Cookies e Tecnologias Semelhantes
                   </h2>
                   <p>
-                    Utilizamos cookies e tecnologias semelhantes para melhorar a
-                    experiência do utilizador, analisar o uso da plataforma e
-                    personalizar conteúdos. Pode gerir as suas preferências de
-                    cookies através das configurações do seu navegador.
+                    Com o seu consentimento, utilizamos o Pixel da Meta
+                    (Meta Platforms, Inc.) para medir visitas à página pública
+                    e rotas visitadas, contactos, registos e ativações do teste
+                    gratuito.
+                    O Pixel pode tratar identificadores de cookies e informações
+                    técnicas do navegador e da visita para medição de campanhas.
+                    Os eventos não incluem palavras-passe, tokens de autenticação,
+                    mensagens, conteúdo de conversas, dados bancários ou dados de
+                    contacto do utilizador. O Pixel só é carregado após a escolha
+                    afirmativa do utilizador; a recusa não afeta o funcionamento
+                    da plataforma. Pode alterar ou retirar a escolha em
+                    “Preferências de cookies”.
                   </p>
                 </section>
 
@@ -205,6 +214,13 @@ export function PrivacyPolicyViewer() {
                 </section>
               </div>
             </ScrollArea>
+            <button
+              type="button"
+              className="mt-4 rounded-md border px-4 py-2 text-sm font-medium hover:bg-gray-100"
+              onClick={openMetaPixelPreferences}
+            >
+              Gerir preferências de cookies
+            </button>
       </main>
     </div>
   );

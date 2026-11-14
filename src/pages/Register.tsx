@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import logo from "@/assets/muwoyo-logo.png";
+import { trackMetaEvent } from "@/lib/meta-pixel";
 
 const ANGOLA_PROVINCES = [
   "Bengo", "Benguela", "Bié", "Cabinda", "Cuando", "Cubango", "Cuanza Norte",
@@ -51,7 +52,7 @@ export default function Register() {
     }
     setSubmitting(true);
     const referralCode = new URLSearchParams(window.location.search).get("ref")?.trim() || undefined;
-    const { error } = await signUp(email, password, {
+    const { error, created } = await signUp(email, password, {
       full_name: name,
       phone: phone.replace(/\D/g, ""),
       province,
@@ -62,6 +63,9 @@ export default function Register() {
       toast({ title: "Não foi possível criar a conta", description: error, variant: "destructive" });
       return;
     }
+    if (created) trackMetaEvent("CompleteRegistration");
+    if (created) window.sessionStorage.setItem("muwoyo_pending_registration_created", "true");
+    else window.sessionStorage.removeItem("muwoyo_pending_registration_created");
     window.sessionStorage.setItem("muwoyo_pending_email", email);
     toast({
       title: "Conta criada",

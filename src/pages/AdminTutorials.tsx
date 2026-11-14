@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Pencil, Plus, Trash2, Video } from "lucide-react";
 import AdminShell from "@/components/AdminShell";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { AppDatabase } from "@/integrations/supabase/app-types";
 
 type TutorialVideo = {
   id: string;
@@ -20,11 +22,12 @@ type TutorialVideo = {
   cover_url: string | null;
   position: number;
   is_published: boolean;
+  is_intro_video: boolean;
 };
 
 type Form = Omit<TutorialVideo, "id">;
-const emptyForm: Form = { title: "", subtitle: "", description: "", video_url: "", cover_url: "", position: 0, is_published: true };
-const sb = supabase as any;
+const emptyForm: Form = { title: "", subtitle: "", description: "", video_url: "", cover_url: "", position: 0, is_published: true, is_intro_video: false };
+const sb = supabase as unknown as SupabaseClient<AppDatabase>;
 
 export default function AdminTutorials() {
   const { toast } = useToast();
@@ -34,13 +37,13 @@ export default function AdminTutorials() {
   const [form, setForm] = useState<Form>(emptyForm);
   const [saving, setSaving] = useState(false);
 
-  const load = async () => {
-    const { data, error } = await sb.from("tutorial_videos").select("id,title,subtitle,description,video_url,cover_url,position,is_published").order("position").order("created_at");
+  const load = useCallback(async () => {
+    const { data, error } = await sb.from("tutorial_videos").select("id,title,subtitle,description,video_url,cover_url,position,is_published,is_intro_video").order("position").order("created_at");
     if (error) toast({ title: "Não foi possível carregar os tutoriais", description: error.message, variant: "destructive" });
     setVideos((data || []) as TutorialVideo[]);
-  };
+  }, [toast]);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { void load(); }, [load]);
 
   const startCreate = () => {
     setEditing(null);
@@ -50,7 +53,7 @@ export default function AdminTutorials() {
 
   const startEdit = (video: TutorialVideo) => {
     setEditing(video);
-    setForm({ title: video.title, subtitle: video.subtitle || "", description: video.description || "", video_url: video.video_url, cover_url: video.cover_url || "", position: video.position, is_published: video.is_published });
+    setForm({ title: video.title, subtitle: video.subtitle || "", description: video.description || "", video_url: video.video_url, cover_url: video.cover_url || "", position: video.position, is_published: video.is_published, is_intro_video: video.is_intro_video });
     setOpen(true);
   };
 
@@ -77,7 +80,13 @@ export default function AdminTutorials() {
     const { error } = await query;
     setSaving(false);
     if (error) {
-      toast({ title: "Não foi possível guardar", description: error.message, variant: "destructive" });
+      toast({
+        title: "Não foi possível guardar",
+        description: error.code === "23505"
+          ? "Já existe um vídeo de apresentação. Desmarque essa opção no vídeo atual antes de escolher outro."
+          : error.message,
+        variant: "destructive",
+      });
       return;
     }
     toast({ title: editing ? "Tutorial atualizado" : "Tutorial adicionado" });
@@ -105,7 +114,7 @@ export default function AdminTutorials() {
           <Card key={video.id} className="overflow-hidden border-border/60 shadow-sm">
             <div className="aspect-video bg-muted">{video.cover_url ? <img src={video.cover_url} alt={`Capa de ${video.title}`} className="h-full w-full object-cover" /> : <iframe className="h-full w-full" src={video.video_url} title={video.title} allowFullScreen />}</div>
             <CardHeader className="flex flex-row items-start justify-between gap-4">
-              <div><CardTitle className="text-lg">{video.title}</CardTitle>{video.subtitle && <p className="mt-1 text-sm text-muted-foreground">{video.subtitle}</p>}<p className="mt-1 text-xs text-muted-foreground">{video.is_published ? "Publicado" : "Rascunho"} · posição {video.position + 1}</p></div>
+              <div><CardTitle className="text-lg">{video.title}</CardTitle>{video.subtitle && <p className="mt-1 text-sm text-muted-foreground">{video.subtitle}</p>}<p className="mt-1 text-xs text-muted-foreground">{video.is_published ? "Publicado" : "Rascunho"} · posição {video.position + 1}{video.is_intro_video ? " · apresentação da landing page" : ""}</p></div>
               <div className="flex shrink-0 gap-1"><Button size="icon" variant="ghost" onClick={() => startEdit(video)} aria-label="Editar tutorial"><Pencil className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => remove(video)} aria-label="Remover tutorial"><Trash2 className="h-4 w-4" /></Button></div>
             </CardHeader>
             {video.description && <CardContent className="pt-0 text-sm text-muted-foreground">{video.description}</CardContent>}
@@ -122,7 +131,7 @@ export default function AdminTutorials() {
             <div className="space-y-2"><Label htmlFor="tutorial-url">Vídeo</Label><div className="flex gap-2"><Input id="tutorial-url" required placeholder="URL ou upload de vídeo" value={form.video_url} onChange={(e) => setForm({ ...form, video_url: e.target.value })} /><label className="inline-flex shrink-0 cursor-pointer items-center rounded-md border px-3 text-sm hover:bg-accent">Carregar<input type="file" accept="video/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadMedia(e.target.files[0], "video_url")} /></label></div></div>
             <div className="space-y-2"><Label htmlFor="tutorial-cover">Capa</Label><div className="flex gap-2"><Input id="tutorial-cover" placeholder="URL ou upload de imagem" value={form.cover_url || ""} onChange={(e) => setForm({ ...form, cover_url: e.target.value })} /><label className="inline-flex shrink-0 cursor-pointer items-center rounded-md border px-3 text-sm hover:bg-accent">Carregar<input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadMedia(e.target.files[0], "cover_url")} /></label></div></div>
             <div className="space-y-2"><Label htmlFor="tutorial-description">Descrição</Label><Textarea id="tutorial-description" value={form.description || ""} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
-            <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label htmlFor="tutorial-position">Posição</Label><Input id="tutorial-position" type="number" min="0" value={form.position} onChange={(e) => setForm({ ...form, position: Number(e.target.value) })} /></div><label className="flex items-center gap-3 pt-7 text-sm"><Switch checked={form.is_published} onCheckedChange={(checked) => setForm({ ...form, is_published: checked })} />Publicado</label></div>
+            <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor="tutorial-position">Posição</Label><Input id="tutorial-position" type="number" min="0" value={form.position} onChange={(e) => setForm({ ...form, position: Number(e.target.value) })} /></div><label className="flex items-center gap-3 pt-2 text-sm"><Switch checked={form.is_published} onCheckedChange={(checked) => setForm({ ...form, is_published: checked })} />Publicado</label><label className="flex items-center gap-3 text-sm sm:col-span-2"><Switch checked={form.is_intro_video} onCheckedChange={(checked) => setForm({ ...form, is_intro_video: checked })} />Usar como vídeo de apresentação na landing page</label></div>
             <Button className="w-full" disabled={saving}>{saving ? "A guardar..." : "Guardar vídeo"}</Button>
           </form>
         </DialogContent>

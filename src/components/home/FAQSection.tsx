@@ -4,6 +4,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { trackMetaEvent } from "@/lib/meta-pixel";
 
 const faqs = [
   {
@@ -129,6 +130,7 @@ const FAQSection = () => {
             href="https://wa.me/244962011401"
             target="_blank"
             rel="noopener noreferrer"
+            onClick={() => trackMetaEvent("Contact")}
             className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-colors"
           >
             Falar com Suporte

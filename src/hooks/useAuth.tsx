@@ -7,7 +7,7 @@ interface AuthCtx {
   session: Session | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  signUp: (email: string, password: string, meta?: { full_name?: string; phone?: string; province?: string; referral_code?: string }) => Promise<{ error: string | null }>;
+  signUp: (email: string, password: string, meta?: { full_name?: string; phone?: string; province?: string; referral_code?: string }) => Promise<{ error: string | null; created: boolean }>;
   signOut: () => Promise<void>;
 }
 
@@ -52,10 +52,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = async (email: string, password: string, meta?: { full_name?: string; phone?: string; province?: string; referral_code?: string }) => {
     if (!isSupabaseConfigured) {
-      return { error: "O Supabase não está configurado. Defina VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY." };
+      return { error: "O Supabase não está configurado. Defina VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY.", created: false };
     }
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -63,9 +63,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           data: { full_name: meta?.full_name, phone: meta?.phone },
         },
       });
-      return { error: error?.message ?? null };
+      return {
+        error: error?.message ?? null,
+        created: !error && Boolean(data.user?.identities?.length),
+      };
     } catch {
-      return { error: "Não foi possível conectar ao Supabase. Verifique a URL do projeto e a sua conexão." };
+      return { error: "Não foi possível conectar ao Supabase. Verifique a URL do projeto e a sua conexão.", created: false };
     }
   };
 

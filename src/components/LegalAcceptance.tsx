@@ -13,6 +13,7 @@ import {
 import { AlertCircle, ArrowRight, Check, Mail, Phone, ShieldCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { trackMetaEvent } from "@/lib/meta-pixel";
 
 interface LegalAcceptanceProps {
   userId: string;
@@ -85,6 +86,7 @@ export function LegalAcceptance({
   };
 
   const handleContactWhatsApp = () => {
+    trackMetaEvent("Contact");
     window.open("https://wa.me/244962011401", "_blank");
   };
 

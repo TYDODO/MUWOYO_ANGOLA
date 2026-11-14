@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
+import { isVideoFile, normalizeVideoUrl } from "@/lib/video-url";
 
 type TutorialVideo = { id: string; title: string; subtitle: string | null; description: string | null; video_url: string; cover_url: string | null; position: number };
 
@@ -54,27 +55,7 @@ export default function Tutorial() {
 
 function VideoFrame({ video, playing, onPlay }: { video: TutorialVideo; playing: boolean; onPlay: () => void }) {
   const source = normalizeVideoUrl(video.video_url);
-  const isFile = /\.(mp4|webm|ogg)(\?.*)?$/i.test(source);
-  if (isFile) return <div className="relative aspect-video bg-black"><video className="h-full w-full" controls controlsList="nodownload" poster={video.cover_url || undefined} src={source} /></div>;
+  if (isVideoFile(source)) return <div className="relative aspect-video bg-black"><video className="h-full w-full" controls controlsList="nodownload" poster={video.cover_url || undefined} src={source} /></div>;
   if (video.cover_url && !playing) return <button type="button" onClick={onPlay} className="group relative aspect-video w-full overflow-hidden bg-black text-left"><img src={video.cover_url} alt={`Capa de ${video.title}`} className="h-full w-full object-cover transition group-hover:scale-[1.02]" /><span className="absolute inset-0 flex items-center justify-center bg-black/30 text-sm font-semibold text-white">Reproduzir vídeo</span></button>;
   return <div className="aspect-video bg-black"><iframe className="h-full w-full" src={source} title={video.title} referrerPolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /></div>;
-}
-
-function normalizeVideoUrl(value: string) {
-  try {
-    const url = new URL(value);
-    if (url.hostname === "youtu.be") {
-      const videoId = url.pathname.slice(1).split("/")[0];
-      return `https://www.youtube.com/embed/${videoId}?${new URLSearchParams({ autoplay: "1", rel: "0", origin: window.location.origin })}`;
-    }
-    if (url.hostname.endsWith("youtube.com")) {
-      const videoId = url.searchParams.get("v") || url.pathname.match(/\/(?:shorts|live|embed)\/([^/?]+)/)?.[1];
-      if (videoId) return `https://www.youtube.com/embed/${videoId}?${new URLSearchParams({ autoplay: "1", rel: "0", origin: window.location.origin })}`;
-    }
-    if (url.hostname.endsWith("vimeo.com")) {
-      const videoId = url.pathname.split("/").filter(Boolean).pop();
-      if (videoId) return `https://player.vimeo.com/video/${videoId}?autoplay=1`;
-    }
-  } catch { /* keep direct/embed URL */ }
-  return value;
 }

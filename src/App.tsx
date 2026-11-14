@@ -65,6 +65,8 @@ import TeamMembers from "./pages/TeamMembers";
 import AttendantDashboard from "./pages/AttendantDashboard";
 import DeliveryManagement from "./pages/DeliveryManagement";
 import DeliveryDashboard from "./pages/DeliveryDashboard";
+import MetaPixel from "./components/MetaPixel";
+import AttendantPresence from "./components/AttendantPresence";
 
 const queryClient = new QueryClient();
 const protectedPage = (page: JSX.Element) => (
@@ -82,6 +84,8 @@ const App = () => (
       <Sonner />
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <AuthProvider>
+          <MetaPixel />
+          <AttendantPresence />
           <PwaLaunchGate>
           <Routes>
             <Route path="/login" element={<Login />} />

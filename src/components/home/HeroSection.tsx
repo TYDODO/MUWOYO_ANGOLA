@@ -3,11 +3,18 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Zap, Shield, Clock, MessageCircle } from "lucide-react";
+import { ArrowRight, Zap, Shield, Clock, MessageCircle, PlayCircle } from "lucide-react";
 import heroPolo from "@/assets/landing/hero-polo.png";
 import heroTshirt from "@/assets/landing/hero-tshirt.jpg";
 import heroShirt from "@/assets/landing/hero-shirt.jpg";
 import heroJacket from "@/assets/landing/hero-jacket.jpg";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { supabase } from "@/integrations/supabase/client";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { AppDatabase } from "@/integrations/supabase/app-types";
+import { isVideoFile, normalizeVideoUrl } from "@/lib/video-url";
+
+const appDb = supabase as unknown as SupabaseClient<AppDatabase>;
 
 interface Message {
   text: string;
@@ -87,7 +94,25 @@ const messagesSequence: Message[] = [
 export default function HeroSection() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [typing, setTyping] = useState(false);
+  const [introVideo, setIntroVideo] = useState<{ title: string; video_url: string; cover_url: string | null } | null>(null);
+  const [introOpen, setIntroOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    void (async () => {
+      const { data, error } = await appDb
+        .from("tutorial_videos")
+        .select("title,video_url,cover_url")
+        .eq("is_published", true)
+        .eq("is_intro_video", true)
+        .maybeSingle();
+      if (error) {
+        console.warn("Não foi possível carregar o vídeo de apresentação.", error);
+        return;
+      }
+      setIntroVideo(data);
+    })();
+  }, []);
 
   useEffect(() => {
     let i = 0;
@@ -187,9 +212,10 @@ export default function HeroSection() {
               size="sm" // Reduzindo o tamanho
               variant="outline"
               className="border-emerald-500 text-emerald-500 hover:bg-emerald-50 rounded-full px-4 sm:px-6 font-bold text-sm sm:text-base py-3 sm:py-auto h-auto sm:h-10 min-h-[36px] sm:min-h-[36px]"
-              onClick={() => document.getElementById("como-funciona")?.scrollIntoView({ behavior: "smooth" })}
+              onClick={() => setIntroOpen(true)}
             >
-              Conhecer a plataforma
+              <PlayCircle className="mr-2 h-4 w-4" />
+              Ver como funciona
             </Button>
           </div>
         </div>
@@ -248,6 +274,23 @@ export default function HeroSection() {
           </div>
         </div>
       </div>
+      <Dialog open={introOpen} onOpenChange={setIntroOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>{introVideo?.title || "Como funciona a Muwoyo"}</DialogTitle>
+            <DialogDescription>Veja a apresentação da plataforma sem sair desta página.</DialogDescription>
+          </DialogHeader>
+          {introVideo ? <IntroVideoFrame video={introVideo} /> : <p className="py-12 text-center text-sm text-muted-foreground">O vídeo de apresentação será disponibilizado em breve.</p>}
+        </DialogContent>
+      </Dialog>
     </section>
   );
+}
+
+function IntroVideoFrame({ video }: { video: { title: string; video_url: string; cover_url: string | null } }) {
+  const source = normalizeVideoUrl(video.video_url);
+  if (isVideoFile(source)) {
+    return <video className="aspect-video w-full rounded-md bg-black" controls playsInline poster={video.cover_url || undefined} src={source} />;
+  }
+  return <div className="aspect-video overflow-hidden rounded-md bg-black"><iframe className="h-full w-full" src={source} title={video.title} referrerPolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /></div>;
 }

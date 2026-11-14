@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { useRole } from "@/hooks/useRole";
 import { supabase } from "@/integrations/supabase/client";
+import { trackMetaEvent } from "@/lib/meta-pixel";
 import { resendVerificationCode, verifyEmailCode, type EmailVerificationError } from "@/lib/email-verification";
 import logo from "@/assets/muwoyo-logo.png";
 
@@ -99,11 +100,38 @@ export default function EmailVerification() {
     if (code.length !== CODE_LENGTH) return;
     setStatus("verifying");
     setError(null);
+    const isNewRegistration =
+      !emailChange &&
+      window.sessionStorage.getItem("muwoyo_pending_registration_created") === "true";
     const result = await verifyEmailCode(code, email);
     if (result.success) {
-      await supabase.auth.refreshSession();
+      const { data: refreshedSession, error: refreshError } = await supabase.auth.refreshSession();
+      if (refreshError) {
+        console.error("Não foi possível atualizar a sessão após confirmar o email:", refreshError);
+      } else if (isNewRegistration && refreshedSession.session?.user) {
+        const userId = refreshedSession.session.user.id;
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("trial_started_at")
+          .eq("user_id", userId)
+          .maybeSingle();
+
+        if (profileError) {
+          console.error("Não foi possível confirmar a ativação do teste gratuito:", profileError);
+        } else if (profile?.trial_started_at) {
+          const eventKey = `muwoyo:meta-pixel:start-trial:${userId}`;
+          try {
+            if (window.localStorage.getItem(eventKey) !== "sent" && trackMetaEvent("StartTrial")) {
+              window.localStorage.setItem(eventKey, "sent");
+            }
+          } catch (storageError) {
+            console.error("Não foi possível guardar a deduplicação local do evento StartTrial:", storageError);
+          }
+        }
+      }
       setStatus("success");
       window.sessionStorage.removeItem("muwoyo_pending_email");
+      window.sessionStorage.removeItem("muwoyo_pending_registration_created");
       window.setTimeout(() => navigate(emailChange ? "/dashboard" : "/dashboard", { replace: true }), 500);
     } else if ("error" in result) {
       setStatus("error");

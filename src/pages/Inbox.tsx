@@ -26,7 +26,6 @@ import {
   FileText,
   MoreVertical,
   Smile,
-  Tag as TagIcon,
   UserRound,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -144,6 +143,11 @@ export default function Inbox() {
   const [activeInstance, setActiveInstance] = useState("");
   const [selected, setSelected] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [conversationSelectionMode, setConversationSelectionMode] = useState(false);
+  const [selectedConversationIds, setSelectedConversationIds] = useState<Set<string>>(new Set());
+  const [messageSelectionMode, setMessageSelectionMode] = useState(false);
+  const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(new Set());
+  const [bulkActionBusy, setBulkActionBusy] = useState(false);
   const [atLatest, setAtLatest] = useState(true);
   const [typing, setTyping] = useState(false);
   const [contactState, setContactState] = useState<string | null>(null);
@@ -173,6 +177,7 @@ export default function Inbox() {
   const [mediaCaption, setMediaCaption] = useState("");
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [reactionTargetId, setReactionTargetId] = useState<string | null>(null);
+  const reactionPressTimerRef = useRef<number | null>(null);
   const [mediaRetryMap, setMediaRetryMap] = useState<Record<string, number>>({});
   const [mediaStateMap, setMediaStateMap] = useState<Record<string, { loading: boolean; error: boolean }>>({});
   const [profileOpen, setProfileOpen] = useState(false);
@@ -632,6 +637,9 @@ export default function Inbox() {
     readReconciledConversationsRef.current.delete(conversation.id);
     pendingInitialScrollConversationRef.current = conversation.id;
     scrollAfterLoadRef.current = false;
+    setMessageSelectionMode(false);
+    setSelectedMessageIds(new Set());
+    setReactionTargetId(null);
     selectedRef.current = conversation;
     setSelected(conversation);
     setMessages([]);
@@ -833,28 +841,6 @@ export default function Inbox() {
         : undefined,
     } : current);
     toast({ title: "Etiqueta eliminada" });
-  };
-
-  const toggleConversationTag = async (tag: InboxCategory) => {
-    if (!selected || !ownerUserId) return;
-    const hasTag = selected.contact?.tags?.some((item) => item.id === tag.id) || false;
-    const result = hasTag
-      ? await db.from("crm_contact_tags").delete().eq("user_id", ownerUserId).eq("contact_id", selected.contact_id).eq("tag_id", tag.id)
-      : await db.from("crm_contact_tags").insert({ user_id: ownerUserId, contact_id: selected.contact_id, tag_id: tag.id });
-    if (result.error) {
-      toast({ title: "Não foi possível atualizar a etiqueta", description: result.error.message, variant: "destructive" });
-      return;
-    }
-    const tags = hasTag
-      ? selected.contact?.tags?.filter((item) => item.id !== tag.id) || []
-      : [...(selected.contact?.tags || []), tag];
-    setSelected((current) => current ? {
-      ...current,
-      contact: current.contact ? { ...current.contact, tags } : undefined,
-    } : current);
-    setConversations((current) => current.map((conversation) => conversation.id === selected.id
-      ? { ...conversation, contact: conversation.contact ? { ...conversation.contact, tags } : undefined }
-      : conversation));
   };
 
   const assignConversation = async (assigneeId: string | null) => {
@@ -1122,17 +1108,18 @@ export default function Inbox() {
     }
   };
 
-  const sendReaction = async (message: Message, reaction: string) => {
-    if (!selected || !user || !ownerUserId || !message.external_id) return;
+  const sendReaction = async (message: Message, reaction: string, notify = true) => {
+    if (!selected || !user || !ownerUserId || !message.external_id) return false;
     const { data: instance } = await db.from("instances").select("instance_name").eq("user_id", ownerUserId).eq("instance_name", selected.instance_name || activeInstance).maybeSingle();
-    if (!instance?.instance_name) return;
+    if (!instance?.instance_name) return false;
     const { error } = await supabase.functions.invoke("inbox-send", { body: { instanceName: instance.instance_name, phoneNumber: selected.contact?.phone_number, kind: "reaction", reaction, messageKey: { id: message.external_id, remoteJid: `${selected.contact?.phone_number}@s.whatsapp.net`, fromMe: message.direction === "outbound" } } });
     if (error) {
-      toast({ title: "Não foi possível reagir", description: error.message, variant: "destructive" });
-      return;
+      if (notify) toast({ title: "Não foi possível reagir", description: error.message, variant: "destructive" });
+      return false;
     }
     setReactionTargetId(null);
-    toast({ title: "Reação enviada", description: `Você reagiu com ${reaction}` });
+    if (notify) toast({ title: "Reação enviada", description: `Você reagiu com ${reaction}` });
+    return true;
   };
 
   const openNewConversation = async () => {
@@ -1264,6 +1251,105 @@ export default function Inbox() {
     await load();
   };
 
+  const toggleConversationSelection = (conversationId: string) => {
+    setSelectedConversationIds((current) => {
+      const next = new Set(current);
+      if (next.has(conversationId)) next.delete(conversationId);
+      else next.add(conversationId);
+      return next;
+    });
+  };
+
+  const runBulkConversationAction = async (action: "archive" | "delete") => {
+    const targets = conversations.filter((conversation) =>
+      selectedConversationIds.has(conversation.id) && conversation.contact?.phone_number,
+    );
+    if (!targets.length || !activeInstance) return;
+    if (action === "delete" && !window.confirm(`Eliminar ${targets.length} conversa(s) e as mensagens associadas?`)) return;
+    setBulkActionBusy(true);
+    const failedIds = new Set<string>();
+    for (const conversation of targets) {
+      try {
+        const { data, error } = await supabase.functions.invoke("inbox-actions", {
+          body: {
+            action,
+            instanceName: conversation.instance_name || activeInstance,
+            phoneNumber: conversation.contact?.phone_number,
+          },
+        });
+        if (error || !data?.ok) failedIds.add(conversation.id);
+      } catch {
+        failedIds.add(conversation.id);
+      }
+    }
+    if (action === "delete" && selected && selectedConversationIds.has(selected.id) && !failedIds.has(selected.id)) {
+      setSelected(null);
+      selectedRef.current = null;
+      setMessages([]);
+    }
+    setSelectedConversationIds(failedIds);
+    setConversationSelectionMode(failedIds.size > 0);
+    await load();
+    setBulkActionBusy(false);
+    toast({
+      title: failedIds.size ? "Ação parcialmente concluída" : action === "delete" ? "Conversas eliminadas" : "Conversas arquivadas",
+      description: failedIds.size ? `${failedIds.size} de ${targets.length} conversa(s) não puderam ser processadas.` : `${targets.length} conversa(s) processada(s).`,
+      variant: failedIds.size ? "destructive" : "default",
+    });
+  };
+
+  const runBulkMessageReaction = async (reaction: string) => {
+    const targets = messages.filter((message) => selectedMessageIds.has(message.id) && message.external_id);
+    if (!targets.length) return;
+    setBulkActionBusy(true);
+    const results = await Promise.all(targets.map(async (message) => {
+      try {
+        return await sendReaction(message, reaction, false);
+      } catch {
+        return false;
+      }
+    }));
+    const succeeded = results.filter(Boolean).length;
+    setSelectedMessageIds(new Set());
+    setMessageSelectionMode(false);
+    setBulkActionBusy(false);
+    toast({
+      title: succeeded === targets.length ? "Reações enviadas" : "Reações parcialmente enviadas",
+      description: `${succeeded} de ${targets.length} mensagem(ns) receberam ${reaction}.`,
+      variant: succeeded === targets.length ? "default" : "destructive",
+    });
+  };
+
+  const deleteSelectedMessages = async () => {
+    if (!selected || !selectedMessageIds.size || selectedMessageIds.size > 100 || bulkActionBusy) return;
+    const conversation = selected;
+    const messageIds = [...selectedMessageIds];
+    if (!window.confirm(`Eliminar ${messageIds.length} mensagem(ns) do histórico local? As mensagens no WhatsApp não serão alteradas.`)) return;
+    setBulkActionBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("inbox-actions", {
+        body: { action: "delete_messages", conversationId: conversation.id, messageIds },
+      });
+      if (error || !data?.ok) {
+        const errorMessage = await getFunctionErrorMessage(error, data?.error || "Tente novamente.");
+        toast({ title: "Não foi possível eliminar as mensagens", description: errorMessage, variant: "destructive" });
+        return;
+      }
+      setSelectedMessageIds(new Set());
+      setMessageSelectionMode(false);
+      if (selectedRef.current?.id === conversation.id) await loadMessages(conversation);
+      toast({ title: "Mensagens eliminadas do histórico local", description: `${data.deletedCount} mensagem(ns) eliminada(s).` });
+    } catch (error) {
+      toast({
+        title: "Não foi possível eliminar as mensagens",
+        description: error instanceof Error ? error.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setBulkActionBusy(false);
+    }
+  };
+
   const reactionOptions = ["👍", "❤️", "😂", "😮", "😢", "🙏", "🔥", "✨"];
   const getMessagePreviewText = (message: Message) => {
     const text = message.message_text?.trim();
@@ -1291,6 +1377,14 @@ export default function Inbox() {
     const root = messageScrollRef.current;
     if (!root) return;
     root.scrollTo({ top: root.scrollHeight, behavior: "smooth" });
+  };
+  const startReactionPress = (messageId: string) => {
+    if (reactionPressTimerRef.current !== null) window.clearTimeout(reactionPressTimerRef.current);
+    reactionPressTimerRef.current = window.setTimeout(() => setReactionTargetId(messageId), 550);
+  };
+  const cancelReactionPress = () => {
+    if (reactionPressTimerRef.current !== null) window.clearTimeout(reactionPressTimerRef.current);
+    reactionPressTimerRef.current = null;
   };
   if (loading)
     return (
@@ -1322,7 +1416,7 @@ export default function Inbox() {
       <div
         data-inbox
         data-has-selection={selected ? "true" : "false"}
-        className="grid h-dvh min-h-0 gap-3 overflow-hidden lg:h-[calc(100vh-10.5rem)] lg:min-h-[560px] lg:grid-cols-[minmax(230px,30%)_minmax(0,70%)]"
+        className="grid h-dvh min-h-0 gap-3 overflow-hidden lg:h-[calc(100dvh-8rem)] lg:min-h-0 lg:grid-cols-[minmax(230px,30%)_minmax(0,70%)]"
       >
         <Card className="inbox-conversation-list flex min-h-0 min-w-0 flex-col overflow-hidden border-0 shadow-none">
           <CardHeader className="shrink-0 px-2 py-2">
@@ -1336,6 +1430,33 @@ export default function Inbox() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
+            <div className="flex flex-wrap items-center gap-1">
+              <Button
+                size="sm"
+                variant={conversationSelectionMode ? "default" : "outline"}
+                className="h-7 px-2 text-[11px]"
+                onClick={() => {
+                  setConversationSelectionMode((current) => !current);
+                  setSelectedConversationIds(new Set());
+                }}
+              >
+                {conversationSelectionMode ? "Cancelar seleção" : "Selecionar conversas"}
+              </Button>
+              {conversationSelectionMode && (
+                <>
+                  <Button size="sm" variant="outline" className="h-7 px-2 text-[11px]" onClick={() => setSelectedConversationIds(new Set(visible.map((conversation) => conversation.id)))}>
+                    Selecionar visíveis
+                  </Button>
+                  <span className="text-[11px] text-muted-foreground">{selectedConversationIds.size} selecionada(s)</span>
+                  <Button size="sm" variant="outline" className="h-7 px-2 text-[11px]" disabled={!selectedConversationIds.size || bulkActionBusy} onClick={() => void runBulkConversationAction("archive")}>
+                    Arquivar
+                  </Button>
+                  <Button size="sm" variant="destructive" className="h-7 px-2 text-[11px]" disabled={!selectedConversationIds.size || bulkActionBusy} onClick={() => void runBulkConversationAction("delete")}>
+                    Eliminar
+                  </Button>
+                </>
+              )}
+            </div>
             <div className="inbox-filters flex gap-1 overflow-x-auto pb-1">
               <Button
                 className="h-7 shrink-0 px-2 text-[11px]"
@@ -1421,10 +1542,17 @@ export default function Inbox() {
               <button
                 type="button"
                 key={conversation.id}
-                onClick={() => selectConversation(conversation)}
+                onClick={() => conversationSelectionMode
+                  ? toggleConversationSelection(conversation.id)
+                  : selectConversation(conversation)}
                 className={`inbox-conversation-row w-full p-2 text-left ${selected?.id === conversation.id ? "is-selected" : ""}`}
               >
                 <div className="flex items-center gap-2">
+                  {conversationSelectionMode && (
+                    <span aria-hidden="true" className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[10px] ${selectedConversationIds.has(conversation.id) ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground"}`}>
+                      {selectedConversationIds.has(conversation.id) ? "✓" : ""}
+                    </span>
+                  )}
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#d7b98e] text-xs font-semibold text-[#4a3d31]">
                     {conversation.contact?.profile_picture_url ? (
                       <img
@@ -1442,11 +1570,6 @@ export default function Inbox() {
                         {conversation.contact?.name ||
                           conversation.contact?.phone_number}
                       </span>
-                      {conversation.unread_count > 0 && (
-                        <Badge className="h-5 min-w-5 px-1 text-[10px]">
-                          {conversation.unread_count}
-                        </Badge>
-                      )}
                     </div>
                     <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
                       <span className="truncate">
@@ -1541,52 +1664,8 @@ export default function Inbox() {
                       · {selected.contact?.phone_number}
                     </div>
                   )}
-                  {selected && (selected.contact?.stage || selected.contact?.tags?.length) && (
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      {selected.contact.stage && <Badge className="h-5 px-1.5 text-[10px] font-semibold" style={{ backgroundColor: selected.contact.stage.color, color: getCategoryTextColor(selected.contact.stage.color) }}>{selected.contact.stage.name}</Badge>}
-                      {selected.contact.tags?.map((tag) => <Badge key={tag.id} className="h-5 px-1.5 text-[10px] font-semibold" style={{ backgroundColor: tag.color, color: getCategoryTextColor(tag.color) }}>{tag.name}</Badge>)}
-                    </div>
-                  )}
                 </div>
               </button>
-              {selected && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-8 shrink-0 gap-1 px-2 text-xs"
-                      aria-label="Atribuir etiquetas ao cliente"
-                    >
-                      <TagIcon className="h-3.5 w-3.5" />
-                      <span className="hidden sm:inline">Etiquetas</span>
-                      {(selected.contact?.tags?.length || 0) > 0 && (
-                        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-600 px-1 text-[10px] text-white">
-                          {selected.contact?.tags?.length}
-                        </span>
-                      )}
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="max-h-80 w-60 overflow-y-auto">
-                    <DropdownMenuLabel>Etiquetas do cliente</DropdownMenuLabel>
-                    {inboxTags.map((tag) => (
-                      <DropdownMenuCheckboxItem
-                        key={tag.id}
-                        checked={Boolean(selected.contact?.tags?.some((item) => item.id === tag.id))}
-                        onSelect={(event) => event.preventDefault()}
-                        onCheckedChange={() => void toggleConversationTag(tag)}
-                      >
-                        <span className="mr-2 inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: tag.color }} />
-                        <span className="truncate">{tag.name}</span>
-                      </DropdownMenuCheckboxItem>
-                    ))}
-                    {!inboxTags.length && (
-                      <div className="px-2 py-2 text-xs text-muted-foreground">Crie etiquetas no segmentador da Inbox.</div>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
               {selected && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -1608,6 +1687,20 @@ export default function Inbox() {
                 </DropdownMenu>
               )}
               {selected && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={messageSelectionMode ? "default" : "outline"}
+                  className="h-8 shrink-0 px-2 text-xs"
+                  onClick={() => {
+                    setMessageSelectionMode((current) => !current);
+                    setSelectedMessageIds(new Set());
+                  }}
+                >
+                  {messageSelectionMode ? "Cancelar seleção" : "Selecionar mensagens"}
+                </Button>
+              )}
+              {selected && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon" aria-label="Ações da conversa"><MoreVertical className="h-4 w-4" /></Button>
@@ -1626,6 +1719,38 @@ export default function Inbox() {
             </div>
           </CardHeader>
           <CardContent className="relative flex min-h-0 flex-1 flex-col gap-2 bg-[radial-gradient(#d8d0c4_0.7px,transparent_0.7px)] [background-size:16px_16px]">
+            {messageSelectionMode && (
+              <div className="flex shrink-0 flex-wrap items-center gap-1 rounded-md border bg-white/90 p-1.5">
+                <span className="mr-1 text-xs text-muted-foreground">{selectedMessageIds.size} selecionada(s)</span>
+                {reactionOptions.map((reaction) => (
+                  <Button
+                    key={reaction}
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 p-0 text-base"
+                    disabled={!selectedMessageIds.size || bulkActionBusy}
+                    onClick={() => void runBulkMessageReaction(reaction)}
+                    aria-label={`Reagir em massa com ${reaction}`}
+                  >
+                    {reaction}
+                  </Button>
+                ))}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="destructive"
+                  className="h-7 px-2 text-[11px]"
+                  disabled={!selectedMessageIds.size || selectedMessageIds.size > 100 || bulkActionBusy}
+                  onClick={() => void deleteSelectedMessages()}
+                >
+                  Eliminar selecionadas
+                </Button>
+                <Button type="button" size="sm" variant="ghost" className="ml-auto h-7 px-2 text-[11px]" onClick={() => setSelectedMessageIds(new Set(messages.map((message) => message.id)))}>
+                  Selecionar todas
+                </Button>
+              </div>
+            )}
             <div
               ref={messageScrollRef}
               className="inbox-message-scroll min-h-0 flex-1 space-y-1 overflow-y-auto px-1 py-2"
@@ -1653,17 +1778,32 @@ export default function Inbox() {
                         className={`flex ${message.direction === "outbound" ? "justify-end" : "justify-start"}`}
                       >
                         <div
-                          onContextMenu={(event) => {
-                            if (!message.external_id) return;
-                            event.preventDefault();
-                            setReactionTargetId((current) => current === message.id ? null : message.id);
-                          }}
+                          onTouchStart={() => message.external_id && startReactionPress(message.id)}
+                          onTouchEnd={cancelReactionPress}
+                          onTouchCancel={cancelReactionPress}
+                          onTouchMove={cancelReactionPress}
                           className={`group relative max-w-[78%] rounded-lg px-2.5 py-1.5 text-sm shadow-sm ${message.direction === "outbound" ? "rounded-br-sm bg-[#d9fdd3] text-[#26342a]" : "rounded-bl-sm bg-white text-[#2e2b28]"} ${reactionTargetId === message.id ? "ring-2 ring-[#3c9b65]" : ""}`}
                         >
+                          {messageSelectionMode && (
+                            <button
+                              type="button"
+                              className={`absolute top-1 flex h-5 w-5 items-center justify-center rounded-full border bg-white text-xs shadow ${message.direction === "outbound" ? "-left-6" : "-right-6"} ${selectedMessageIds.has(message.id) ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground"}`}
+                              onClick={() => setSelectedMessageIds((current) => {
+                                const next = new Set(current);
+                                if (next.has(message.id)) next.delete(message.id);
+                                else next.add(message.id);
+                                return next;
+                              })}
+                              aria-label={`${selectedMessageIds.has(message.id) ? "Desselecionar" : "Selecionar"} mensagem`}
+                              aria-pressed={selectedMessageIds.has(message.id)}
+                            >
+                              {selectedMessageIds.has(message.id) ? "✓" : ""}
+                            </button>
+                          )}
                           {message.external_id && (
                             <button
                               type="button"
-                              className="absolute -top-2 right-1 flex h-7 w-7 items-center justify-center rounded-full border bg-white/95 text-[#60716a] opacity-70 shadow-sm transition hover:opacity-100 focus-visible:opacity-100"
+                              className="inbox-reaction-trigger absolute -top-2 right-1 h-7 w-7 items-center justify-center rounded-full border bg-white/95 text-[#60716a] shadow-sm transition"
                               onClick={() => setReactionTargetId((current) => current === message.id ? null : message.id)}
                               aria-label="Reagir à mensagem"
                               title="Reagir à mensagem"

@@ -21,6 +21,86 @@ Deno.serve(async (req) => {
     const action = String(body.action || "");
     const phone = String(body.phoneNumber || "");
     const instanceName = String(body.instanceName || "");
+
+    if (action === "delete_messages") {
+      const conversationId = typeof body.conversationId === "string" ? body.conversationId : "";
+      const messageIds = body.messageIds;
+      if (
+        !conversationId
+        || !Array.isArray(messageIds)
+        || messageIds.length === 0
+        || messageIds.length > 100
+        || messageIds.some((id) => typeof id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))
+        || new Set(messageIds).size !== messageIds.length
+      ) {
+        return json({ error: "invalid_message_selection" }, 400);
+      }
+
+      const { data: conversation, error: conversationError } = await admin
+        .from("inbox_conversations")
+        .select("id,user_id,instance_name,contact_id,assigned_to")
+        .eq("id", conversationId)
+        .maybeSingle();
+      if (conversationError) return json({ error: "conversation_lookup_failed" }, 500);
+      if (!conversation?.instance_name) return json({ error: "conversation_not_found" }, 404);
+
+      const { data: business, error: businessError } = await client
+        .from("businesses")
+        .select("id")
+        .eq("owner_id", conversation.user_id)
+        .maybeSingle();
+      if (businessError) return json({ error: "authorization_lookup_failed" }, 500);
+      if (!business) return json({ error: "forbidden" }, 403);
+
+      const isOwner = conversation.user_id === auth.user.id;
+      if (!isOwner) {
+        if (conversation.assigned_to !== auth.user.id) return json({ error: "forbidden" }, 403);
+        const { data: canManage, error: permissionError } = await client.rpc("has_business_permission", {
+          p_permission: "inbox.manage",
+          p_business_id: business.id,
+        });
+        if (permissionError) return json({ error: "authorization_lookup_failed" }, 500);
+        if (!canManage) return json({ error: "forbidden" }, 403);
+      }
+
+      const { data: contact, error: contactError } = await admin
+        .from("whatsapp_contacts")
+        .select("phone_number")
+        .eq("id", conversation.contact_id)
+        .eq("user_id", conversation.user_id)
+        .eq("instance_name", conversation.instance_name)
+        .maybeSingle();
+      if (contactError) return json({ error: "contact_lookup_failed" }, 500);
+      if (!contact?.phone_number) return json({ error: "contact_not_found" }, 404);
+
+      const scopedMessages = admin
+        .from("messages")
+        .select("id")
+        .eq("user_id", conversation.user_id)
+        .eq("whatsapp_instance_id", conversation.instance_name)
+        .eq("phone_number", contact.phone_number)
+        .in("id", messageIds);
+      const { data: matchingMessages, error: messageLookupError } = await scopedMessages;
+      if (messageLookupError) return json({ error: "message_lookup_failed" }, 500);
+      if ((matchingMessages || []).length !== messageIds.length) {
+        return json({ error: "message_selection_mismatch" }, 400);
+      }
+
+      const { data: deletedMessages, error: deleteError } = await admin
+        .from("messages")
+        .delete()
+        .eq("user_id", conversation.user_id)
+        .eq("whatsapp_instance_id", conversation.instance_name)
+        .eq("phone_number", contact.phone_number)
+        .in("id", messageIds)
+        .select("id");
+      if (deleteError) return json({ error: "message_delete_failed" }, 500);
+      if ((deletedMessages || []).length !== messageIds.length) {
+        return json({ error: "message_selection_changed" }, 409);
+      }
+      return json({ ok: true, deletedCount: deletedMessages.length });
+    }
+
     const { data: instance } = await admin.from("instances").select("instance_name").eq("user_id", auth.user.id).eq("instance_name", instanceName).maybeSingle();
     if (!instance) return json({ error: "instance_not_owned" }, 403);
     const { data: contact } = await admin.from("whatsapp_contacts").select("id,remote_jid,is_group").eq("user_id", auth.user.id).eq("instance_name", instanceName).eq("phone_number", phone).maybeSingle();

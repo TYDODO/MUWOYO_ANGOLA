@@ -68,9 +68,11 @@ Deno.serve(async (req) => {
     if (!contact) return json({ error: "contact_not_owned" }, 403);
     const { data: targetContact } = await admin.from("whatsapp_contacts").select("is_group,remote_jid").eq("id", contact.id).maybeSingle();
     if (targetContact?.is_group || String(targetContact?.remote_jid || "").endsWith("@g.us")) return json({ error: "group_messages_not_allowed" }, 403);
+    let attendantConversationId: string | null = null;
     if (actorMember?.role === "attendant") {
-      const { data: conversation } = await admin.from("inbox_conversations").select("assigned_to").eq("user_id", userId).eq("instance_name", instanceName).eq("contact_id", contact.id).maybeSingle();
+      const { data: conversation } = await admin.from("inbox_conversations").select("id,assigned_to").eq("user_id", userId).eq("instance_name", instanceName).eq("contact_id", contact.id).maybeSingle();
       if (conversation?.assigned_to !== actorUserId) return json({ error: "conversation_not_assigned" }, 403);
+      attendantConversationId = conversation.id;
     }
 
     let sent: any = null;
@@ -247,6 +249,18 @@ Deno.serve(async (req) => {
         message_key: { id: externalMessageId, remoteJid, fromMe: true },
       } },
     });
+
+    if (actorMember?.role === "attendant" && attendantConversationId && databaseMessageId) {
+      const { error: auditError } = await admin.from("business_audit_log").insert({
+        business_id: actorMember.business_id,
+        actor_user_id: actorUserId,
+        target_user_id: actorUserId,
+        action: "inbox_message_sent",
+        conversation_id: attendantConversationId,
+        metadata: { message_id: databaseMessageId, kind },
+      });
+      if (auditError) console.error("Could not record attendant message activity", auditError);
+    }
 
     return json({ ok: true, data: sent.data });
   } catch (e: any) {

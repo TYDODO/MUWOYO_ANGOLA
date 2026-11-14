@@ -20,6 +20,7 @@ import {
   Inbox as InboxIcon,
   Workflow,
   PanelLeft,
+  LifeBuoy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -29,6 +30,7 @@ import { supabase } from "@/integrations/supabase/client";
 import NotificationBell from "@/components/NotificationBell";
 import ProfileSheet from "@/components/ProfileSheet";
 import logo from "@/assets/muwoyo-logo.png";
+import { trackMetaEvent } from "@/lib/meta-pixel";
 
 const groups = [
   { title: "Principal", items: [{ title: "Dashboard", to: "/dashboard", icon: ChartArea }] },
@@ -62,7 +64,7 @@ const groups = [
   ] },
 ];
 
-type SidebarBadgeKey = "inbox" | "crm" | "orders" | "appointments" | "campaigns" | "followUp";
+type SidebarBadgeKey = "crm" | "orders" | "appointments" | "campaigns" | "followUp";
 type SidebarCounts = Partial<Record<SidebarBadgeKey, number>>;
 
 function SidebarContent({ collapsed = false, planDaysRemaining, expiryLabel, counts = {} }: { collapsed?: boolean; planDaysRemaining: number | null; expiryLabel: string; counts?: SidebarCounts }) {
@@ -85,8 +87,7 @@ function SidebarContent({ collapsed = false, planDaysRemaining, expiryLabel, cou
               {!collapsed && <h2 className="px-3 pb-1 text-[10px] font-semibold uppercase text-muted-foreground">{group.title}</h2>}
               {visibleItems.map((item) => {
                 const badgeKey: SidebarBadgeKey | undefined =
-                  item.to === "/inbox" ? "inbox"
-                    : item.to === "/crm" ? "crm"
+                  item.to === "/crm" ? "crm"
                       : item.to === "/pedidos" ? "orders"
                         : item.to === "/agenda" ? "appointments"
                           : item.to === "/campanhas" ? "campaigns"
@@ -114,6 +115,17 @@ function SidebarContent({ collapsed = false, planDaysRemaining, expiryLabel, cou
             </section>
           );
         })}
+        <a
+          href="https://wa.me/244962011401"
+          target="_blank"
+          rel="noreferrer"
+          onClick={() => trackMetaEvent("Contact")}
+          className={`flex items-center gap-3 rounded-md py-2 text-sm font-medium text-foreground/80 transition-colors hover:bg-accent ${collapsed ? "justify-center px-2" : "px-3"}`}
+          title={collapsed ? "Suporte" : undefined}
+        >
+          <LifeBuoy className="h-4 w-4" />
+          {!collapsed && <span className="min-w-0 flex-1 truncate">Suporte</span>}
+        </a>
       </nav>
       <div className={`border-t border-sidebar-border ${collapsed ? "p-1" : "p-2"}`}>
         {!collapsed && planDaysRemaining !== null && (
@@ -174,13 +186,6 @@ export default function DashboardShell({
     }
 
     const now = new Date().toISOString();
-    const isAttendant = membership?.role === "attendant";
-    const inboxQuery = supabase
-      .from("inbox_conversations")
-      .select("contact_id,instance_name")
-      .eq("user_id", ownerUserId);
-    if (isAttendant) inboxQuery.eq("assigned_to", user.id);
-    inboxQuery.gt("unread_count", 0);
     const crmQuery = supabase
       .from("whatsapp_contacts")
       .select("id", { count: "exact", head: true })
@@ -188,8 +193,7 @@ export default function DashboardShell({
       .eq("is_group", false)
       .is("crm_viewed_at", null);
 
-    const [inboxResult, crmResult, orderResult, appointmentResult, campaignResult, followUpResult] = await Promise.all([
-      inboxQuery,
+    const [crmResult, orderResult, appointmentResult, campaignResult, followUpResult] = await Promise.all([
       crmQuery,
       supabase.from("store_orders").select("id", { count: "exact", head: true }).eq("user_id", ownerUserId).in("status", ["new", "pending"]),
       supabase.from("appointments").select("id", { count: "exact", head: true }).eq("user_id", ownerUserId).eq("status", "pending").gte("scheduled_at", now),
@@ -197,69 +201,23 @@ export default function DashboardShell({
       supabase.from("follow_up_jobs").select("id", { count: "exact", head: true }).eq("user_id", ownerUserId).eq("status", "pending").lte("due_at", now),
     ]);
 
-    let unreadMessagesCount = 0;
-    if (inboxResult.error) {
-      console.warn("Não foi possível carregar conversas para o contador da Inbox.", inboxResult.error);
-    } else if (inboxResult.data?.length) {
-      const contactIds = [...new Set(inboxResult.data.map((row) => row.contact_id))];
-      const { data: contacts, error: contactError } = await supabase
-        .from("whatsapp_contacts")
-        .select("id,phone_number,instance_name,is_group")
-        .eq("user_id", ownerUserId)
-        .in("id", contactIds);
-      if (contactError) {
-        console.warn("Não foi possível carregar contactos para o contador da Inbox.", contactError);
-      } else {
-        const contactMap = new Map((contacts || []).map((contact) => [contact.id, contact]));
-        const pairs = [...new Map(inboxResult.data.flatMap((conversation) => {
-          const contact = contactMap.get(conversation.contact_id);
-          const instance = conversation.instance_name || contact?.instance_name;
-          if (!contact || contact.is_group || !instance || !contact.phone_number || contact.phone_number.includes("@")) return [];
-          const key = `${instance}\u0000${contact.phone_number}`;
-          return [[key, { instance, phone: contact.phone_number }]] as const;
-        })).values()];
-        const quoteFilterValue = (value: string) => `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
-        for (let offset = 0; offset < pairs.length; offset += 20) {
-          const pairFilter = pairs.slice(offset, offset + 20)
-            .map((pair) => `and(whatsapp_instance_id.eq.${quoteFilterValue(pair.instance)},phone_number.eq.${quoteFilterValue(pair.phone)})`)
-            .join(",");
-          const { count, error } = await supabase
-            .from("messages")
-            .select("id", { count: "exact", head: true })
-            .eq("user_id", ownerUserId)
-            .eq("direction", "inbound")
-            .is("read_at", null)
-            .or(`and(or(from_me.is.null,from_me.eq.false),or(is_historical.is.null,is_historical.eq.false),or(delivery_status.is.null,delivery_status.neq.read),or(${pairFilter}))`);
-          if (error) {
-            console.warn("Não foi possível contar mensagens não lidas da Inbox.", error);
-            unreadMessagesCount = 0;
-            break;
-          }
-          unreadMessagesCount += count || 0;
-        }
-      }
-    }
-
     const counts: SidebarCounts = {
-      inbox: unreadMessagesCount,
       crm: crmResult.count || 0,
       orders: orderResult.count || 0,
       appointments: appointmentResult.count || 0,
       campaigns: campaignResult.count || 0,
       followUp: followUpResult.count || 0,
     };
-    const failed = [inboxResult.error, crmResult.error, orderResult.error, appointmentResult.error, campaignResult.error, followUpResult.error].filter(Boolean);
+    const failed = [crmResult.error, orderResult.error, appointmentResult.error, campaignResult.error, followUpResult.error].filter(Boolean);
     if (failed.length) console.warn("Não foi possível atualizar todos os contadores do menu.", failed);
     setSidebarCounts(counts);
-  }, [membership?.role, ownerUserId, user]);
+  }, [ownerUserId, user]);
 
   useEffect(() => {
     void loadSidebarCounts();
     if (!user || !ownerUserId) return;
     const channel = supabase
       .channel(`sidebar-counts-${ownerUserId}-${user.id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "inbox_conversations", filter: `user_id=eq.${ownerUserId}` }, () => void loadSidebarCounts())
-      .on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `user_id=eq.${ownerUserId}` }, () => void loadSidebarCounts())
       .on("postgres_changes", { event: "*", schema: "public", table: "whatsapp_contacts", filter: `user_id=eq.${ownerUserId}` }, () => void loadSidebarCounts())
       .on("postgres_changes", { event: "*", schema: "public", table: "store_orders", filter: `user_id=eq.${ownerUserId}` }, () => void loadSidebarCounts())
       .on("postgres_changes", { event: "*", schema: "public", table: "appointments", filter: `user_id=eq.${ownerUserId}` }, () => void loadSidebarCounts())

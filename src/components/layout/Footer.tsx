@@ -7,6 +7,7 @@ import {
   Youtube,
 } from "lucide-react";
 import logo from "../../assets/muwoyo-logo.png";
+import { openMetaPixelPreferences, trackMetaEvent } from "@/lib/meta-pixel";
 
 const Footer = () => {
   return (
@@ -115,6 +116,15 @@ const Footer = () => {
                   Política de Privacidade
                 </Link>
               </li>
+              <li>
+                <button
+                  type="button"
+                  className="text-background/70 hover:text-primary transition-colors"
+                  onClick={openMetaPixelPreferences}
+                >
+                  Preferências de cookies
+                </button>
+              </li>
             </ul>
           </div>
 
@@ -136,6 +146,7 @@ const Footer = () => {
                 <a
                 href="https://wa.me/244962011401"
                 className="text-background/70 hover:text-primary transition-colors"
+                onClick={() => trackMetaEvent("Contact")}
               >
                 WhatsApp: +244 962 011 401
               </a>
