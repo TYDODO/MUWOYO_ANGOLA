@@ -1,0 +1,103 @@
+import { FormEvent, useEffect, useState } from "react";
+import { Plus, Trash2 } from "lucide-react";
+import DashboardShell from "@/components/DashboardShell";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useAuth } from "@/hooks/useAuth";
+import { usePlanEntitlements } from "@/hooks/usePlanEntitlements";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+
+const db = supabase as any;
+type Rule = { id: string; name: string; delay_minutes: number; max_attempts: number; ai_instruction: string | null; is_active: boolean; created_at: string };
+type Job = { id: string; status: string; attempts: number; due_at: string; contact_id: string; contact?: { name: string | null; phone_number: string } };
+type Contact = { id: string; name: string | null; phone_number: string };
+type Stage = { delay_minutes: string; instruction: string; message_template: string; use_ai: boolean };
+
+export default function FollowUp() {
+  const { user } = useAuth();
+  const { entitlements, planName, loading } = usePlanEntitlements();
+  const { toast } = useToast();
+  const [rules, setRules] = useState<Rule[]>([]);
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
+  const [stages, setStages] = useState<Stage[]>([{ delay_minutes: "120", instruction: "", message_template: "", use_ai: true }]);
+  const [form, setForm] = useState({ name: "", ai_instruction: "" });
+  const [activeInstance, setActiveInstance] = useState<{ id: string; instance_name: string } | null>(null);
+  const activeRules = rules.filter((rule) => rule.is_active).length;
+  const pendingJobs = jobs.filter((job) => job.status === "pending").length;
+  const sentJobs = jobs.filter((job) => job.status === "sent").length;
+
+  const load = async () => {
+    if (!user) return;
+    const { data: instance } = await db.from("instances").select("id,instance_name").eq("user_id", user.id).eq("status", "connected").order("created_at", { ascending: false }).limit(1).maybeSingle();
+    setActiveInstance(instance || null);
+    if (!instance) { setRules([]); setJobs([]); setContacts([]); return; }
+    const [{ data: ruleRows }, { data: jobRows }, { data: contacts }] = await Promise.all([
+      db.from("follow_up_rules").select("id,name,delay_minutes,max_attempts,ai_instruction,is_active,created_at").eq("user_id", user.id).eq("whatsapp_instance_id", instance.id).order("created_at", { ascending: false }),
+      db.from("follow_up_jobs").select("id,status,attempts,due_at,contact_id").eq("user_id", user.id).eq("whatsapp_instance_id", instance.id).order("due_at").limit(100),
+      db.from("whatsapp_contacts").select("id,name,phone_number,is_group").eq("user_id", user.id).eq("whatsapp_instance_id", instance.id).eq("is_group", false),
+    ]);
+    const contactMap = new Map((contacts || []).map((contact: { id: string; name: string | null; phone_number: string }) => [contact.id, contact]));
+    setRules(ruleRows || []);
+    setJobs((jobRows || []).map((job: Job) => ({ ...job, contact: contactMap.get(job.contact_id) })));
+    setContacts(contacts || []);
+  };
+  useEffect(() => { void load(); }, [user]);
+
+  const create = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!user || !activeInstance) return;
+    const { data: rule, error } = await db.from("follow_up_rules").insert({ user_id: user.id, whatsapp_instance_id: activeInstance.id, name: form.name.trim(), delay_minutes: Number(stages[0]?.delay_minutes) || 120, max_attempts: stages.length, ai_instruction: form.ai_instruction.trim() || null, is_active: false }).select("id").single();
+    if (error || !rule) return toast({ title: "Não foi possível criar a regra", description: error?.message, variant: "destructive" });
+    const stageRows = stages.map((stage, position) => ({ rule_id: rule.id, position, delay_minutes: Number(stage.delay_minutes) || 120, instruction: stage.instruction.trim() || null, message_template: stage.message_template.trim() || null, use_ai: stage.use_ai }));
+    const stageResult = await db.from("follow_up_stages").insert(stageRows);
+    const contactResult = selectedContacts.length ? await db.from("follow_up_rule_contacts").insert(selectedContacts.map((contact_id) => ({ rule_id: rule.id, contact_id, user_id: user.id }))) : { error: null };
+    if (stageResult.error || contactResult.error) return toast({ title: "Regra criada, mas não foi possível guardar todas as etapas/contactos", description: stageResult.error?.message || contactResult.error?.message, variant: "destructive" });
+    setForm({ name: "", ai_instruction: "" });
+    setStages([{ delay_minutes: "120", instruction: "", message_template: "", use_ai: true }]);
+    setSelectedContacts([]);
+    toast({ title: "Regra criada" });
+    void load();
+  };
+
+  const toggleRule = async (rule: Rule) => {
+    const { error } = await db.from("follow_up_rules").update({ is_active: !rule.is_active }).eq("id", rule.id).eq("user_id", user?.id);
+    if (error) return toast({ title: "Não foi possível atualizar a regra", description: error.message, variant: "destructive" });
+    void load();
+  };
+
+  if (loading) return <DashboardShell title="Follow Up IA" description="A carregar acesso...">A carregar...</DashboardShell>;
+  if (!entitlements.followUp) return <DashboardShell title="Follow Up IA" description="Recupere oportunidades de conversas existentes."><Card><CardContent className="space-y-3 p-6"><CardTitle>Follow Up IA</CardTitle><p className="text-sm text-muted-foreground">Disponível a partir do plano Growth. Plano atual: {planName}.</p><Button onClick={() => window.location.assign("/recargas")}>Fazer upgrade</Button></CardContent></Card></DashboardShell>;
+
+  return <DashboardShell title="Follow Up IA" description="Automatize lembretes para conversas que ficaram sem resposta.">
+    <div className="flex justify-end"><Button onClick={() => document.getElementById("new-follow-up")?.scrollIntoView({ behavior: "smooth" })}><Plus className="mr-2 h-4 w-4" />Criar automação</Button></div>
+    <div className="grid gap-3 sm:grid-cols-3">{[["Regras ativas", activeRules], ["Aguardando envio", pendingJobs], ["Mensagens enviadas", sentJobs]].map(([label, value]) => <Card key={String(label)}><CardContent className="p-5"><p className="text-sm text-muted-foreground">{label}</p><p className="mt-2 text-3xl font-semibold">{value}</p></CardContent></Card>)}</div>
+    <Card id="new-follow-up"><CardHeader><CardTitle>Criar automação</CardTitle><p className="text-sm text-muted-foreground">Defina quando contactar, quantas tentativas fazer e para quem enviar.</p></CardHeader><CardContent><form onSubmit={create} className="grid gap-6">
+      <section className="grid gap-3 md:grid-cols-2">
+        <div className="space-y-2"><Label htmlFor="follow-up-name">Nome da regra</Label><Input id="follow-up-name" required placeholder="Ex.: Retomar orçamento" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+        <div className="space-y-2"><Label htmlFor="follow-up-instruction">Orientação geral para a IA (opcional)</Label><Textarea id="follow-up-instruction" placeholder="Contexto que a IA deve considerar em todas as tentativas." value={form.ai_instruction} onChange={(e) => setForm({ ...form, ai_instruction: e.target.value })} /></div>
+      </section>
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-medium">Tentativas de contacto</h3><p className="text-xs text-muted-foreground">Cada etapa corresponde a uma tentativa.</p></div><Button type="button" size="sm" variant="outline" disabled={stages.length >= 20} onClick={() => setStages([...stages, { delay_minutes: "1440", instruction: "", message_template: "", use_ai: true }])}><Plus className="mr-2 h-4 w-4" />Adicionar tentativa</Button></div>
+        {stages.map((stage, index) => <div key={index} className="grid gap-3 rounded-md border p-4 md:grid-cols-2">
+          <div className="flex items-center justify-between md:col-span-2"><h4 className="font-medium">Tentativa {index + 1}</h4>{stages.length > 1 && <Button type="button" size="icon" variant="ghost" aria-label={`Remover tentativa ${index + 1}`} onClick={() => setStages(stages.filter((_, stageIndex) => stageIndex !== index))}><Trash2 className="h-4 w-4" /></Button>}</div>
+          <div className="space-y-2"><Label htmlFor={`follow-up-delay-${index}`}>Aguardar antes do envio (minutos)</Label><Input id={`follow-up-delay-${index}`} type="number" min="1" required value={stage.delay_minutes} onChange={(e) => setStages(stages.map((item, i) => i === index ? { ...item, delay_minutes: e.target.value } : item))} /></div>
+          <label className="flex items-center gap-2 self-end pb-2 text-sm"><Checkbox checked={stage.use_ai} onCheckedChange={(checked) => setStages(stages.map((item, i) => i === index ? { ...item, use_ai: Boolean(checked) } : item))} />Gerar mensagem com IA</label>
+          <div className="space-y-2"><Label htmlFor={`follow-up-stage-instruction-${index}`}>Instrução específica (opcional)</Label><Input id={`follow-up-stage-instruction-${index}`} placeholder="Ex.: Pergunte se ainda precisa de ajuda." value={stage.instruction} onChange={(e) => setStages(stages.map((item, i) => i === index ? { ...item, instruction: e.target.value } : item))} /></div>
+          <div className="space-y-2"><Label htmlFor={`follow-up-template-${index}`}>Mensagem fixa (opcional)</Label><Input id={`follow-up-template-${index}`} placeholder="Usada quando a IA está desativada." value={stage.message_template} onChange={(e) => setStages(stages.map((item, i) => i === index ? { ...item, message_template: e.target.value } : item))} /></div>
+        </div>)}
+      </section>
+      <section className="space-y-3"><div className="flex items-center justify-between gap-2"><div><h3 className="font-medium">Contactos abrangidos</h3><p className="text-xs text-muted-foreground">{selectedContacts.length} selecionados</p></div><Button type="button" size="sm" variant="outline" onClick={() => setSelectedContacts(selectedContacts.length === contacts.length ? [] : contacts.map((contact) => contact.id))}>{selectedContacts.length === contacts.length ? "Limpar seleção" : "Selecionar todos"}</Button></div><div className="max-h-48 overflow-y-auto rounded-md border p-2">{contacts.map((contact) => <label key={contact.id} className="flex items-center gap-2 border-b py-2 text-sm last:border-0"><Checkbox checked={selectedContacts.includes(contact.id)} onCheckedChange={(checked) => setSelectedContacts(checked ? [...selectedContacts, contact.id] : selectedContacts.filter((id) => id !== contact.id))} /><span>{contact.name || contact.phone_number}</span></label>)}{contacts.length === 0 && <p className="p-2 text-sm text-muted-foreground">Não há contactos individuais nesta instância.</p>}</div></section>
+      <Button className="w-fit" disabled={!selectedContacts.length}>Guardar como inativa</Button>
+    </form></CardContent></Card>
+    <Card><CardHeader><CardTitle>Regras configuradas</CardTitle></CardHeader><CardContent className="space-y-2">{rules.length === 0 && <p className="text-sm text-muted-foreground">Nenhuma regra criada.</p>}{rules.map((rule) => <div key={rule.id} className="flex flex-col gap-3 rounded border p-3 sm:flex-row sm:items-center sm:justify-between"><div><div className="font-medium">{rule.name}</div><div className="text-sm text-muted-foreground">Após {rule.delay_minutes} min · até {rule.max_attempts} tentativa(s)</div></div><div className="flex items-center gap-2"><Badge variant={rule.is_active ? "default" : "outline"}>{rule.is_active ? "Ativa" : "Inativa"}</Badge><Button size="sm" variant="outline" onClick={() => void toggleRule(rule)}>{rule.is_active ? "Desativar" : "Ativar"}</Button></div></div>)}</CardContent></Card>
+    <Card><CardHeader><CardTitle>Envios e agendamentos</CardTitle></CardHeader><CardContent className="space-y-2">{jobs.length === 0 && <p className="text-sm text-muted-foreground">Ainda não há envios para mostrar.</p>}{jobs.map((job) => <div key={job.id} className="flex items-center justify-between rounded border p-3 text-sm"><div><div className="font-medium">{job.contact?.name || job.contact?.phone_number || "Contacto"}</div><div className="text-muted-foreground">Tentativa {job.attempts} · {new Date(job.due_at).toLocaleString("pt-AO")}</div></div><Badge variant={job.status === "pending" ? "default" : "outline"}>{job.status === "pending" ? "A aguardar" : job.status === "sent" ? "Enviado" : job.status === "cancelled" ? "Cancelado" : job.status}</Badge></div>)}</CardContent></Card>
+  </DashboardShell>;
+}
