@@ -33,11 +33,15 @@ const renderMessage = (template: string, values: Record<string, string>) =>
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+<<<<<<< HEAD
   let claimedCampaignId = "";
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401);
 
+<<<<<<< HEAD
     const isScheduler = authHeader === `Bearer ${SERVICE_KEY}`;
     let actorUserId = "";
     let dataUserId = "";
@@ -77,12 +81,49 @@ Deno.serve(async (req) => {
       } else if (member && (member.role !== "owner" || member.status !== "active")) {
         return json({ error: "business_membership_not_active" }, 403);
       }
+=======
+    const supabase = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: userData, error: userErr } = await supabase.auth.getUser();
+    if (userErr || !userData.user) return json({ error: "Unauthorized" }, 401);
+
+    const actorUserId = userData.user.id;
+    let dataUserId = actorUserId;
+    let manageScope = "all";
+    const { data: member } = await admin
+      .from("business_members")
+      .select("id,business_id,role,status")
+      .eq("user_id", actorUserId)
+      .maybeSingle();
+    if (member?.role === "attendant") {
+      if (member.status !== "active") return json({ error: "attendant_not_active" }, 403);
+      const { data: managePermission } = await admin
+        .from("business_member_permissions")
+        .select("id,data_scope")
+        .eq("member_id", member.id)
+        .eq("permission", "campaigns.manage")
+        .eq("enabled", true)
+        .maybeSingle();
+      if (!managePermission) return json({ error: "campaign_permission_required" }, 403);
+      manageScope = managePermission.data_scope === "own" ? "own" : "all";
+      const { data: business, error: businessError } = await admin
+        .from("businesses")
+        .select("owner_id")
+        .eq("id", member.business_id)
+        .maybeSingle();
+      if (businessError || !business?.owner_id) return json({ error: "business_not_found" }, 404);
+      dataUserId = business.owner_id;
+    } else if (member && (member.role !== "owner" || member.status !== "active")) {
+      return json({ error: "business_membership_not_active" }, 403);
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
     }
     const body = await req.json().catch(() => ({}));
     const campaignId = String(body?.campaignId || "");
 
     if (!campaignId) return json({ error: "campaign_id_required" }, 400);
 
+<<<<<<< HEAD
     let campaignQuery = admin
       .from("campaigns")
       .select("id,name,message_text,status,scheduled_at,created_by,user_id,whatsapp_instance_id");
@@ -94,11 +135,23 @@ Deno.serve(async (req) => {
     if (!campaign) return json({ error: "campaign_not_found" }, 404);
     dataUserId = campaign.user_id;
     if (!isScheduler && manageScope === "own" && campaign.created_by !== actorUserId) {
+=======
+    const { data: campaign } = await admin
+      .from("campaigns")
+      .select("id,name,message_text,status,scheduled_at,created_by")
+      .eq("id", campaignId)
+      .eq("user_id", dataUserId)
+      .maybeSingle();
+
+    if (!campaign) return json({ error: "campaign_not_found" }, 404);
+    if (manageScope === "own" && campaign.created_by !== actorUserId) {
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
       return json({ error: "campaign_not_accessible" }, 403);
     }
     if (campaign.status === "scheduled" && campaign.scheduled_at && new Date(campaign.scheduled_at).getTime() > Date.now()) {
       return json({ error: "campaign_not_due", scheduledAt: campaign.scheduled_at }, 409);
     }
+<<<<<<< HEAD
     if (isScheduler && !["scheduled", "sending", "processing"].includes(campaign.status)) {
       return json({ error: "campaign_not_schedulable" }, 409);
     }
@@ -112,10 +165,15 @@ Deno.serve(async (req) => {
     claimedCampaignId = campaignId;
 
     const { data: queue, error: queueError } = await admin
+=======
+
+    const { data: queue } = await admin
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
       .from("campaign_contacts")
       .select("contact_id")
       .eq("campaign_id", campaignId)
       .eq("user_id", dataUserId)
+<<<<<<< HEAD
       .eq("status", "pending")
       .order("contact_id")
       .limit(3);
@@ -127,6 +185,12 @@ Deno.serve(async (req) => {
         .eq("id", campaignId);
       if (error) throw error;
       claimedCampaignId = "";
+=======
+      .eq("status", "pending");
+
+    if (!queue?.length) {
+      await admin.from("campaigns").update({ status: "completed" }).eq("id", campaignId);
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
       return json({ ok: true, sent: 0, total: 0 });
     }
 
@@ -161,6 +225,7 @@ Deno.serve(async (req) => {
       if (tagName) tagsByContact.set(item.contact_id, [...(tagsByContact.get(item.contact_id) || []), tagName]);
     }
 
+<<<<<<< HEAD
     const instanceQuery = admin.from("instances")
       .select("instance_name")
       .eq("user_id", dataUserId)
@@ -171,6 +236,13 @@ Deno.serve(async (req) => {
     if (instanceError) throw instanceError;
     const instanceName = instanceRow?.instance_name as string | undefined;
     if (!instanceName) throw new Error("whatsapp_instance_not_connected");
+=======
+    const { data: instanceRow } = await admin.from("instances").select("instance_name").eq("user_id", dataUserId).maybeSingle();
+    const instanceName = instanceRow?.instance_name as string | undefined;
+    if (!instanceName) return json({ error: "whatsapp_instance_not_connected" }, 400);
+
+    await admin.from("campaigns").update({ status: "sending" }).eq("id", campaignId);
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
 
     const wait30s = () => new Promise((resolve) => setTimeout(resolve, 30000));
     let sentCount = 0;
@@ -226,6 +298,7 @@ Deno.serve(async (req) => {
     }
 
     const { count: remaining } = await admin.from("campaign_contacts").select("contact_id", { count: "exact", head: true }).eq("campaign_id", campaignId).eq("status", "pending");
+<<<<<<< HEAD
     const { error: finishError } = await admin.from("campaigns")
       .update({ status: remaining ? "sending" : "completed", dispatch_claimed_until: null })
       .eq("id", campaignId);
@@ -239,6 +312,11 @@ Deno.serve(async (req) => {
         .eq("id", claimedCampaignId);
       if (releaseError) console.error("campaign-send claim release failed", releaseError.message);
     }
+=======
+    await admin.from("campaigns").update({ status: remaining ? "sending" : "completed" }).eq("id", campaignId);
+    return json({ ok: true, sent: sentCount, total: queue.length });
+  } catch (e: any) {
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
     console.error("campaign-send error", e);
     return json({ error: e?.message || "internal" }, 500);
   }

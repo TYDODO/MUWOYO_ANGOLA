@@ -14,6 +14,10 @@ import {
   Power,
   Pause,
   Play,
+<<<<<<< HEAD
+=======
+  RefreshCw,
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
   Clock,
   AlertTriangle,
 } from "lucide-react";
@@ -45,6 +49,10 @@ export default function Dashboard() {
   const [messagesReceived, setMessagesReceived] = useState(0);
   const [disconnecting, setDisconnecting] = useState(false);
   const [savingPause, setSavingPause] = useState(false);
+<<<<<<< HEAD
+=======
+  const [refreshing, setRefreshing] = useState(false);
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
   const [accountStatus, setAccountStatus] = useState("trial");
   const [firstLoginOpen, setFirstLoginOpen] = useState(false);
   const [trialExpiresAt, setTrialExpiresAt] = useState<string | null>(null);
@@ -62,6 +70,10 @@ export default function Dashboard() {
 
   const loadAll = useCallback(async () => {
     if (!user) return;
+<<<<<<< HEAD
+=======
+    setRefreshing(true);
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
     const start = new Date();
     start.setHours(0, 0, 0, 0);
     const [{ data: inst }, { data: prof }, { count }] = await Promise.all([
@@ -95,6 +107,10 @@ export default function Dashboard() {
     }
     if (typeof window !== "undefined" && prof?.account_status === "trial" && prof?.trial_expires_at && new Date(prof.trial_expires_at) > new Date() && !window.localStorage.getItem(`muwoyo-first-login-${user.id}`)) setFirstLoginOpen(true);
     setMessagesToday(count ?? 0);
+<<<<<<< HEAD
+=======
+    setRefreshing(false);
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
   }, [user]);
 
   useEffect(() => {
@@ -414,6 +430,24 @@ export default function Dashboard() {
         />
       </div>
 
+<<<<<<< HEAD
+=======
+      <div className="flex justify-end">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={loadAll}
+          disabled={refreshing}
+          className="gap-2"
+        >
+          <RefreshCw
+            className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`}
+          />{" "}
+          Atualizar
+        </Button>
+      </div>
+
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
       <MessagesAreaChart userId={user?.id} />
       <WhatsAppConnectDialog
         open={dialogOpen}

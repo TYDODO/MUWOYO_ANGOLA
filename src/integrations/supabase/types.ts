@@ -110,6 +110,7 @@ export type Database = {
         }
         Relationships: []
       }
+<<<<<<< HEAD
       campaigns: {
         Row: {
           created_at: string
@@ -266,6 +267,8 @@ export type Database = {
         }
         Relationships: []
       }
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
       categories: {
         Row: {
           created_at: string
@@ -344,6 +347,7 @@ export type Database = {
         }
         Relationships: []
       }
+<<<<<<< HEAD
       follow_up_jobs: {
         Row: {
           attempts: number
@@ -389,6 +393,8 @@ export type Database = {
         }
         Relationships: []
       }
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
       instances: {
         Row: {
           automation_paused: boolean
@@ -563,6 +569,7 @@ export type Database = {
         }
         Relationships: []
       }
+<<<<<<< HEAD
       payment_methods: {
         Row: {
           account_holder_name: string | null
@@ -640,6 +647,28 @@ export type Database = {
           position?: number
           product_id?: string
           size?: string | null
+=======
+      product_images: {
+        Row: {
+          created_at: string
+          id: string
+          position: number
+          product_id: string
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          position?: number
+          product_id: string
+          url: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          position?: number
+          product_id?: string
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
           url?: string
         }
         Relationships: [
@@ -796,9 +825,13 @@ export type Database = {
       }
       profiles: {
         Row: {
+<<<<<<< HEAD
           accepts_appointments: boolean
           account_status: string
           ai_personality: string | null
+=======
+          account_status: string
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
           email_verified: boolean
           activated_at: string | null
           activated_by: string | null
@@ -816,6 +849,7 @@ export type Database = {
           full_name: string | null
           id: string
           is_suspended: boolean
+<<<<<<< HEAD
           appointment_duration_minutes: number
           audio_enabled: boolean
           message_limit: number
@@ -827,20 +861,34 @@ export type Database = {
           phone: string | null
           plan_id: string | null
           province: string | null
+=======
+          message_limit: number
+          messages_received: number
+          onboarding_completed: boolean
+          phone: string | null
+          transfer_phone?: string | null
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
           status: string
           setup_paid_at: string | null
           setup_payment_id: string | null
           trial_expires_at: string | null
           trial_started_at: string | null
+<<<<<<< HEAD
           subscription_expires_at: string | null
           topup_audio_seconds_balance: number
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
           updated_at: string
           user_id: string
         }
         Insert: {
+<<<<<<< HEAD
           accepts_appointments?: boolean
           account_status?: string
           ai_personality?: string | null
+=======
+          account_status?: string
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
           email_verified?: boolean
           activated_at?: string | null
           activated_by?: string | null
@@ -857,6 +905,7 @@ export type Database = {
           full_name?: string | null
           id?: string
           is_suspended?: boolean
+<<<<<<< HEAD
           appointment_duration_minutes?: number
           audio_enabled?: boolean
           message_limit?: number
@@ -868,21 +917,34 @@ export type Database = {
           phone?: string | null
           plan_id?: string | null
           province?: string | null
+=======
+          message_limit?: number
+          messages_received?: number
+          onboarding_completed?: boolean
+          phone?: string | null
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
           transfer_phone?: string | null
           status?: string
           setup_paid_at?: string | null
           setup_payment_id?: string | null
           trial_expires_at?: string | null
           trial_started_at?: string | null
+<<<<<<< HEAD
           subscription_expires_at?: string | null
           topup_audio_seconds_balance?: number
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
           updated_at?: string
           user_id: string
         }
         Update: {
+<<<<<<< HEAD
           accepts_appointments?: boolean
           account_status?: string
           ai_personality?: string | null
+=======
+          account_status?: string
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
           email_verified?: boolean
           activated_at?: string | null
           activated_by?: string | null
@@ -899,6 +961,7 @@ export type Database = {
           full_name?: string | null
           id?: string
           is_suspended?: boolean
+<<<<<<< HEAD
           appointment_duration_minutes?: number
           audio_enabled?: boolean
           message_limit?: number
@@ -910,19 +973,29 @@ export type Database = {
           phone?: string | null
           plan_id?: string | null
           province?: string | null
+=======
+          message_limit?: number
+          messages_received?: number
+          onboarding_completed?: boolean
+          phone?: string | null
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
           transfer_phone?: string | null
           status?: string
           setup_paid_at?: string | null
           setup_payment_id?: string | null
           trial_expires_at?: string | null
           trial_started_at?: string | null
+<<<<<<< HEAD
           subscription_expires_at?: string | null
           topup_audio_seconds_balance?: number
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
           updated_at?: string
           user_id?: string
         }
         Relationships: []
       }
+<<<<<<< HEAD
       plan_subscriptions: {
         Row: {
           amount_kz: number
@@ -1037,6 +1110,8 @@ export type Database = {
         }
         Relationships: []
       }
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
       credit_ledger: {
         Row: {
           amount: number
@@ -1326,11 +1401,17 @@ export type Database = {
           created_at: string
           description: string | null
           header_color: string | null
+<<<<<<< HEAD
           hide_store_name: boolean
           id: string
           is_active: boolean
           logo_url: string | null
           logo_size: number
+=======
+          id: string
+          is_active: boolean
+          logo_url: string | null
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
           name: string
           slug: string
           theme_color: string | null
@@ -1343,11 +1424,17 @@ export type Database = {
           created_at?: string
           description?: string | null
           header_color?: string | null
+<<<<<<< HEAD
           hide_store_name?: boolean
           id?: string
           is_active?: boolean
           logo_url?: string | null
           logo_size?: number
+=======
+          id?: string
+          is_active?: boolean
+          logo_url?: string | null
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
           name: string
           slug: string
           theme_color?: string | null
@@ -1360,11 +1447,17 @@ export type Database = {
           created_at?: string
           description?: string | null
           header_color?: string | null
+<<<<<<< HEAD
           hide_store_name?: boolean
           id?: string
           is_active?: boolean
           logo_url?: string | null
           logo_size?: number
+=======
+          id?: string
+          is_active?: boolean
+          logo_url?: string | null
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
           name?: string
           slug?: string
           theme_color?: string | null
@@ -1456,6 +1549,7 @@ export type Database = {
           },
         ]
       }
+<<<<<<< HEAD
       welcome_message_configs: {
         Row: {
           audio_mimetype: string | null
@@ -1556,6 +1650,8 @@ export type Database = {
           },
         ]
       }
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
       user_roles: {
         Row: {
           created_at: string
@@ -1582,7 +1678,10 @@ export type Database = {
           created_at: string
           crm_viewed_at: string | null
           id: string
+<<<<<<< HEAD
           is_group: boolean
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
           instance_name: string | null
           last_message_at: string | null
           name: string | null
@@ -1594,7 +1693,10 @@ export type Database = {
           created_at?: string
           crm_viewed_at?: string | null
           id?: string
+<<<<<<< HEAD
           is_group?: boolean
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
           instance_name?: string | null
           last_message_at?: string | null
           name?: string | null
@@ -1606,7 +1708,10 @@ export type Database = {
           created_at?: string
           crm_viewed_at?: string | null
           id?: string
+<<<<<<< HEAD
           is_group?: boolean
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
           instance_name?: string | null
           last_message_at?: string | null
           name?: string | null
@@ -1621,6 +1726,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+<<<<<<< HEAD
       admin_update_audio_account: {
         Args: {
           p_audio_enabled: boolean
@@ -1635,10 +1741,13 @@ export type Database = {
         Args: { p_months: number; p_user_id: string }
         Returns: Json
       }
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
       get_business_plan_name: {
         Args: Record<PropertyKey, never>
         Returns: string
       }
+<<<<<<< HEAD
       get_audio_balance: {
         Args: { p_user_id?: string }
         Returns: Json
@@ -1656,6 +1765,8 @@ export type Database = {
         Args: { p_approve: boolean; p_reason?: string | null; p_request_id: string }
         Returns: Json
       }
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

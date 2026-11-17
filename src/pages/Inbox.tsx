@@ -24,7 +24,10 @@ import {
   ArrowDown,
   Mic,
   FileText,
+<<<<<<< HEAD
   Forward,
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
   MoreVertical,
   Smile,
   UserRound,
@@ -149,9 +152,12 @@ export default function Inbox() {
   const [messageSelectionMode, setMessageSelectionMode] = useState(false);
   const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(new Set());
   const [bulkActionBusy, setBulkActionBusy] = useState(false);
+<<<<<<< HEAD
   const [forwardOpen, setForwardOpen] = useState(false);
   const [forwardTargetId, setForwardTargetId] = useState("");
   const [forwardSearch, setForwardSearch] = useState("");
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
   const [atLatest, setAtLatest] = useState(true);
   const [typing, setTyping] = useState(false);
   const [contactState, setContactState] = useState<string | null>(null);
@@ -178,7 +184,10 @@ export default function Inbox() {
     discount: "0",
   });
   const [mediaFile, setMediaFile] = useState<File | null>(null);
+<<<<<<< HEAD
   const [recordedVoiceNote, setRecordedVoiceNote] = useState(false);
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
   const [mediaCaption, setMediaCaption] = useState("");
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [reactionTargetId, setReactionTargetId] = useState<string | null>(null);
@@ -408,6 +417,7 @@ export default function Inbox() {
       setSyncing(true);
       try {
         let lastSync: InboxSyncResponse | null = null;
+<<<<<<< HEAD
         let chatOffset = 0;
         const processedOffsets = new Set<number>();
         while (true) {
@@ -423,6 +433,10 @@ export default function Inbox() {
           const { data, error } = await supabase.functions.invoke("inbox-sync", {
             body: { instanceName: activeInstance || undefined, chatOffset },
           });
+=======
+        for (let batch = 0; batch < 4; batch += 1) {
+          const { data, error } = await supabase.functions.invoke("inbox-sync", { body: { instanceName: activeInstance || undefined } });
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
           if (error || data?.error) {
             if (!silent) toast({
                 title: "Sincronização parcial",
@@ -432,6 +446,7 @@ export default function Inbox() {
             break;
           }
           lastSync = data;
+<<<<<<< HEAD
           if (data?.cached || !data?.hasMoreChats) break;
           const nextOffset = Number(data?.nextChatOffset);
           if (!Number.isInteger(nextOffset) || nextOffset <= chatOffset) {
@@ -443,6 +458,9 @@ export default function Inbox() {
             break;
           }
           chatOffset = nextOffset;
+=======
+          if (data?.cached || !data?.historyPending) break;
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
         }
         if (lastSync && !lastSync.cached) await syncContactProfiles();
         if (!silent && lastSync?.cached) {
@@ -737,7 +755,10 @@ export default function Inbox() {
       setMediaFile(
         new File([blob], `voice-${Date.now()}.webm`, { type: blob.type }),
       );
+<<<<<<< HEAD
       setRecordedVoiceNote(true);
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
       setRecording(false);
       setRecordingPaused(false);
       recorderRef.current = null;
@@ -762,7 +783,10 @@ export default function Inbox() {
     setRecording(false);
     setRecordingPaused(false);
     setMediaFile(null);
+<<<<<<< HEAD
     setRecordedVoiceNote(false);
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
   };
   const visible = useMemo(
     () =>
@@ -1106,7 +1130,10 @@ export default function Inbox() {
           mediaUrl,
           fileName: mediaFile?.name,
           mimetype: mediaFile?.type,
+<<<<<<< HEAD
           isVoiceNote: recordedVoiceNote,
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
         },
         headers: { Authorization: `Bearer ${accessToken}` },
       });
@@ -1127,7 +1154,10 @@ export default function Inbox() {
       setText("");
       setMediaCaption("");
       setMediaFile(null);
+<<<<<<< HEAD
       setRecordedVoiceNote(false);
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
       await loadMessages(selected);
     } catch (error) {
       toast({
@@ -1382,6 +1412,7 @@ export default function Inbox() {
     }
   };
 
+<<<<<<< HEAD
   const forwardSelectedMessages = async () => {
     if (!selected || !selectedMessageIds.size || selectedMessageIds.size > 100 || bulkActionBusy) return;
     const target = conversations.find((conversation) => conversation.id === forwardTargetId);
@@ -1427,6 +1458,8 @@ export default function Inbox() {
     }
   };
 
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
   const reactionOptions = ["👍", "❤️", "😂", "😮", "😢", "🙏", "🔥", "✨"];
   const getMessagePreviewText = (message: Message) => {
     const text = message.message_text?.trim();
@@ -1816,6 +1849,7 @@ export default function Inbox() {
                 <Button
                   type="button"
                   size="sm"
+<<<<<<< HEAD
                   variant="outline"
                   className="h-7 px-2 text-[11px]"
                   disabled={!selectedMessageIds.size || selectedMessageIds.size > 100 || bulkActionBusy}
@@ -1827,6 +1861,8 @@ export default function Inbox() {
                 <Button
                   type="button"
                   size="sm"
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
                   variant="destructive"
                   className="h-7 px-2 text-[11px]"
                   disabled={!selectedMessageIds.size || selectedMessageIds.size > 100 || bulkActionBusy}
@@ -2036,11 +2072,17 @@ export default function Inbox() {
                       type="file"
                       className="hidden"
                       accept="image/*,video/*,audio/*,.pdf,.doc,.docx"
+<<<<<<< HEAD
                       onChange={(event) => {
                         setMediaFile(event.target.files?.[0] || null);
                         setRecordedVoiceNote(false);
                         event.currentTarget.value = "";
                       }}
+=======
+                      onChange={(event) =>
+                        setMediaFile(event.target.files?.[0] || null)
+                      }
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
                     />
                   </label>
                   <Input
@@ -2100,7 +2142,11 @@ export default function Inbox() {
                     <Button
                       size="sm"
                       variant="ghost"
+<<<<<<< HEAD
                       onClick={() => { setMediaFile(null); setRecordedVoiceNote(false); }}
+=======
+                      onClick={() => setMediaFile(null)}
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
                     >
                       Remover
                     </Button>
@@ -2113,6 +2159,7 @@ export default function Inbox() {
         </Card>
       </div>
       {selected && (
+<<<<<<< HEAD
         <Fragment>
         <Dialog open={forwardOpen} onOpenChange={(open) => {
           setForwardOpen(open);
@@ -2162,6 +2209,8 @@ export default function Inbox() {
             </div>
           </DialogContent>
         </Dialog>
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
         <Dialog open={profileOpen} onOpenChange={setProfileOpen}>
           <DialogContent className="max-w-md">
             <DialogHeader>
@@ -2193,7 +2242,11 @@ export default function Inbox() {
                   </div>
                 </div>
               </div>
+<<<<<<< HEAD
               <div className="hidden lg:block">
+=======
+              <div>
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
                 <div className="mb-2 text-xs font-medium text-muted-foreground">Etiquetas da conversa</div>
                 <div className="flex flex-wrap gap-2">
                   {inboxTags.map((tag) => {
@@ -2238,6 +2291,13 @@ export default function Inbox() {
                       : "IA ativa"}
                 </div>
                 <div>
+<<<<<<< HEAD
+=======
+                  <span className="text-muted-foreground">Não lidas:</span>{" "}
+                  {selected.unread_count}
+                </div>
+                <div>
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
                   <span className="text-muted-foreground">
                     Última interação:
                   </span>{" "}
@@ -2314,7 +2374,10 @@ export default function Inbox() {
             </div>
           </DialogContent>
         </Dialog>
+<<<<<<< HEAD
         </Fragment>
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
       )}
       <Dialog open={Boolean(previewMedia)} onOpenChange={(open) => !open && setPreviewMedia(null)}>
         <DialogContent className="flex h-[min(90vh,900px)] max-w-[min(95vw,1100px)] flex-col border-0 bg-black/95 p-3 sm:p-5">

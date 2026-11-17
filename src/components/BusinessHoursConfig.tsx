@@ -22,7 +22,11 @@ type DaySchedule = {
   end_time: string;
 };
 
+<<<<<<< HEAD
 export type BusinessHours = Record<DayKey, DaySchedule>;
+=======
+type BusinessHours = Record<DayKey, DaySchedule>;
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
 
 const weekDays: { key: DayKey; label: string }[] = [
   { key: "monday", label: "Segunda-feira" },
@@ -42,7 +46,11 @@ const defaultBusinessHours: BusinessHours = weekDays.reduce(
   {} as BusinessHours,
 );
 
+<<<<<<< HEAD
 export const normalizeBusinessHours = (value: unknown): BusinessHours => {
+=======
+const normalizeBusinessHours = (value: unknown): BusinessHours => {
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
   if (!value || typeof value !== "object") return defaultBusinessHours;
   const payload = value as Record<string, unknown>;
 

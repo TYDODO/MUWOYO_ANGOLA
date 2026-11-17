@@ -1,8 +1,16 @@
+<<<<<<< HEAD
 import { ReactNode, useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
   ChartArea,
   FileText,
+=======
+import { ReactNode, useCallback, useEffect, useState } from "react";
+import { NavLink } from "react-router-dom";
+import {
+  ChartArea,
+  Building2,
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
   Menu,
   Store,
   Star,
@@ -21,8 +29,11 @@ import {
   Workflow,
   PanelLeft,
   LifeBuoy,
+<<<<<<< HEAD
   MessageCircle,
   AudioLines,
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -34,6 +45,7 @@ import ProfileSheet from "@/components/ProfileSheet";
 import logo from "@/assets/muwoyo-logo.png";
 import { trackMetaEvent } from "@/lib/meta-pixel";
 
+<<<<<<< HEAD
 const groups: {
   title: string;
   items: {
@@ -48,6 +60,12 @@ const groups: {
   { title: "Operação comercial", items: [
     { title: "Inbox", to: "/inbox", icon: InboxIcon, permission: "inbox.view" },
     { title: "Informações do negócio", to: "/negocio", icon: FileText, ownerOnly: true },
+=======
+const groups = [
+  { title: "Principal", items: [{ title: "Dashboard", to: "/dashboard", icon: ChartArea }] },
+  { title: "Operação comercial", items: [
+    { title: "Inbox", to: "/inbox", icon: InboxIcon, permission: "inbox.view" },
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
     { title: "CRM", to: "/crm", icon: KanbanSquare, permission: "crm.view" },
     { title: "Meus contactos", to: "/whatsapp", icon: UsersRound, permission: "contacts.view" },
     { title: "Pedidos", to: "/pedidos", icon: ShoppingBag, permission: "orders.view" },
@@ -60,13 +78,23 @@ const groups: {
   { title: "Crescimento", items: [
     { title: "Follow Up", to: "/follow-up", icon: Workflow, ownerOnly: true },
     { title: "Campanhas", to: "/campanhas", icon: Megaphone, permission: "campaigns.view" },
+<<<<<<< HEAD
     { title: "Mensagens de Boas-Vindas", to: "/mensagens-boas-vindas", icon: MessageCircle, ownerOnly: true },
     { title: "Clonagem & Voz", to: "/voz", icon: AudioLines, ownerOnly: true },
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
   ] },
   { title: "Catálogo", items: [
     { title: "Produtos", to: "/produtos", icon: Boxes, permission: "products.view" },
     { title: "Loja online", to: "/minha-loja", icon: Store, ownerOnly: true },
   ] },
+<<<<<<< HEAD
+=======
+  { title: "Configuração", items: [
+    { title: "Informações do negócio", to: "/negocio", icon: Building2, ownerOnly: true },
+    { title: "Configurações", to: "/definicoes", icon: PanelLeft, ownerOnly: true },
+  ] },
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
   { title: "Conta", items: [
     { title: "Pagamentos", to: "/recargas", icon: CreditCard, ownerOnly: true },
     { title: "Faturação", to: "/faturacao", icon: Wallet, ownerOnly: true },
@@ -74,7 +102,14 @@ const groups: {
   ] },
 ];
 
+<<<<<<< HEAD
 function SidebarContent({ collapsed = false, planDaysRemaining, expiryLabel }: { collapsed?: boolean; planDaysRemaining: number | null; expiryLabel: string }) {
+=======
+type SidebarBadgeKey = "crm" | "orders" | "appointments" | "campaigns" | "followUp";
+type SidebarCounts = Partial<Record<SidebarBadgeKey, number>>;
+
+function SidebarContent({ collapsed = false, planDaysRemaining, expiryLabel, counts = {} }: { collapsed?: boolean; planDaysRemaining: number | null; expiryLabel: string; counts?: SidebarCounts }) {
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
   const { user } = useAuth();
   const { isOwner, hasPermission, loading: membershipLoading } = useBusinessMembership();
   return (
@@ -93,6 +128,17 @@ function SidebarContent({ collapsed = false, planDaysRemaining, expiryLabel }: {
             <section key={group.title} className="space-y-0.5">
               {!collapsed && <h2 className="px-3 pb-1 text-[10px] font-semibold uppercase text-muted-foreground">{group.title}</h2>}
               {visibleItems.map((item) => {
+<<<<<<< HEAD
+=======
+                const badgeKey: SidebarBadgeKey | undefined =
+                  item.to === "/crm" ? "crm"
+                      : item.to === "/pedidos" ? "orders"
+                        : item.to === "/agenda" ? "appointments"
+                          : item.to === "/campanhas" ? "campaigns"
+                            : item.to === "/follow-up" ? "followUp"
+                              : undefined;
+                const count = badgeKey ? counts[badgeKey] || 0 : 0;
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
                 return (
                 <NavLink
                   key={item.to}
@@ -102,8 +148,17 @@ function SidebarContent({ collapsed = false, planDaysRemaining, expiryLabel }: {
                   }
                   title={collapsed ? item.title : undefined}
                 >
+<<<<<<< HEAD
                   <item.icon className="h-4 w-4" />
                   {!collapsed && <span className="min-w-0 flex-1 truncate">{item.title}</span>}
+=======
+                  <span className="relative inline-flex">
+                    <item.icon className="h-4 w-4" />
+                    {collapsed && count > 0 && <span className="absolute -right-2 -top-2 h-2.5 w-2.5 rounded-full border border-sidebar bg-emerald-500" />}
+                  </span>
+                  {!collapsed && <span className="min-w-0 flex-1 truncate">{item.title}</span>}
+                  {!collapsed && count > 0 && <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-bold leading-none text-white">{count}</span>}
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
                 </NavLink>
                 );
               })}
@@ -166,12 +221,73 @@ export default function DashboardShell({
   mobileFullscreen?: boolean;
 }) {
   const { user } = useAuth();
+<<<<<<< HEAD
   const { membership } = useBusinessMembership();
+=======
+  const { ownerUserId, membership } = useBusinessMembership();
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
   const isAttendant = membership?.role === "attendant";
   const [currentAccountStatus, setCurrentAccountStatus] = useState(accountStatus || "trial");
   const [subscriptionExpiresAt, setSubscriptionExpiresAt] = useState<string | null>(null);
   const [trialExpiresAt, setTrialExpiresAt] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+<<<<<<< HEAD
+=======
+  const [sidebarCounts, setSidebarCounts] = useState<SidebarCounts>({});
+
+  const loadSidebarCounts = useCallback(async () => {
+    if (!user || !ownerUserId) {
+      setSidebarCounts({});
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const crmQuery = supabase
+      .from("whatsapp_contacts")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", ownerUserId)
+      .eq("is_group", false)
+      .is("crm_viewed_at", null);
+
+    const [crmResult, orderResult, appointmentResult, campaignResult, followUpResult] = await Promise.all([
+      crmQuery,
+      supabase.from("store_orders").select("id", { count: "exact", head: true }).eq("user_id", ownerUserId).in("status", ["new", "pending"]),
+      supabase.from("appointments").select("id", { count: "exact", head: true }).eq("user_id", ownerUserId).eq("status", "pending").gte("scheduled_at", now),
+      supabase.from("campaigns").select("id", { count: "exact", head: true }).eq("user_id", ownerUserId).in("status", ["scheduled", "processing", "sending"]),
+      supabase.from("follow_up_jobs").select("id", { count: "exact", head: true }).eq("user_id", ownerUserId).eq("status", "pending").lte("due_at", now),
+    ]);
+
+    const counts: SidebarCounts = {
+      crm: crmResult.count || 0,
+      orders: orderResult.count || 0,
+      appointments: appointmentResult.count || 0,
+      campaigns: campaignResult.count || 0,
+      followUp: followUpResult.count || 0,
+    };
+    const failed = [crmResult.error, orderResult.error, appointmentResult.error, campaignResult.error, followUpResult.error].filter(Boolean);
+    if (failed.length) console.warn("Não foi possível atualizar todos os contadores do menu.", failed);
+    setSidebarCounts(counts);
+  }, [ownerUserId, user]);
+
+  useEffect(() => {
+    void loadSidebarCounts();
+    if (!user || !ownerUserId) return;
+    const channel = supabase
+      .channel(`sidebar-counts-${ownerUserId}-${user.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "whatsapp_contacts", filter: `user_id=eq.${ownerUserId}` }, () => void loadSidebarCounts())
+      .on("postgres_changes", { event: "*", schema: "public", table: "store_orders", filter: `user_id=eq.${ownerUserId}` }, () => void loadSidebarCounts())
+      .on("postgres_changes", { event: "*", schema: "public", table: "appointments", filter: `user_id=eq.${ownerUserId}` }, () => void loadSidebarCounts())
+      .on("postgres_changes", { event: "*", schema: "public", table: "campaigns", filter: `user_id=eq.${ownerUserId}` }, () => void loadSidebarCounts())
+      .on("postgres_changes", { event: "*", schema: "public", table: "follow_up_jobs", filter: `user_id=eq.${ownerUserId}` }, () => void loadSidebarCounts())
+      .subscribe();
+    const refresh = window.setInterval(() => void loadSidebarCounts(), 60_000);
+    return () => {
+      window.clearInterval(refresh);
+      void supabase.removeChannel(channel);
+    };
+  }, [loadSidebarCounts, ownerUserId, user]);
+
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
   useEffect(() => {
     if (!user || isAttendant) {
       setSubscriptionExpiresAt(null);
@@ -212,7 +328,11 @@ export default function DashboardShell({
   return (
     <div className="min-h-screen bg-background">
       <div className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:block">
+<<<<<<< HEAD
         <SidebarContent collapsed={sidebarCollapsed} planDaysRemaining={planDaysRemaining} expiryLabel={expiryLabel} />
+=======
+        <SidebarContent collapsed={sidebarCollapsed} planDaysRemaining={planDaysRemaining} expiryLabel={expiryLabel} counts={sidebarCounts} />
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
       </div>
       <div className={sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}>
         <header className={`${mobileFullscreen ? "hidden lg:block" : ""} sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur`}>
@@ -225,7 +345,11 @@ export default function DashboardShell({
                   </Button>
                 </SheetTrigger>
                 <SheetContent side="left" className="w-72 p-0">
+<<<<<<< HEAD
                   <SidebarContent planDaysRemaining={planDaysRemaining} expiryLabel={expiryLabel} />
+=======
+                  <SidebarContent planDaysRemaining={planDaysRemaining} expiryLabel={expiryLabel} counts={sidebarCounts} />
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
                 </SheetContent>
               </Sheet>
               <div className="flex items-center gap-3 lg:gap-0">

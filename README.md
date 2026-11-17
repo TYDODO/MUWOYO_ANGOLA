@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Muwoyo
 
 Aplicação Muwoyo para automação de atendimento e vendas via WhatsApp.
@@ -54,3 +55,8 @@ reordenada e fica guardada por configuração.
 No Inbox, mensagens selecionadas podem ser reencaminhadas para outro contacto da
 mesma instância WhatsApp. A sincronização de contactos também cria e associa as
 etiquetas devolvidas pela integração WhatsApp Business ao CRM.
+=======
+# tr
+
+Aplicação Muwoyo para automação de atendimento e vendas via WhatsApp.
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e

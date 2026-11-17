@@ -15,7 +15,10 @@ import EmailVerification from "./pages/EmailVerification";
 import PasswordRecovery from "./pages/PasswordRecovery";
 import Dashboard from "./pages/Dashboard";
 import BusinessInfo from "./pages/BusinessInfo";
+<<<<<<< HEAD
 import WelcomeMessages from "./pages/WelcomeMessages";
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
 import MyWhatsApp from "./pages/MyWhatsApp";
 import StoreManagement from "./pages/StoreManagement";
 import MyProducts from "./pages/MyProducts";
@@ -42,8 +45,11 @@ import AdminTokens from "./pages/AdminTokens";
 import AdminTutorials from "./pages/AdminTutorials";
 import AdminAffiliatesPage from "./pages/AdminAffiliates";
 import AdminPayments from "./pages/AdminPayments";
+<<<<<<< HEAD
 import AdminAudio from "./pages/AdminAudio";
 import VoiceCloning from "./pages/VoiceCloning";
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
 import HumanTransfers from "./pages/HumanTransfers";
 import Tutorial from "./pages/Tutorial";
 import AffiliatesPage from "./pages/Affiliates";
@@ -143,7 +149,10 @@ const App = () => (
             />
             <Route path="/admin/pagamentos" element={<RoleRoute allow={["admin"]}><AdminPaymentMethods /></RoleRoute>} />
             <Route path="/admin/comprovativos" element={<RoleRoute allow={["admin"]}><AdminProofs /></RoleRoute>} />
+<<<<<<< HEAD
             <Route path="/admin/audio" element={<RoleRoute allow={["admin"]}><AdminAudio /></RoleRoute>} />
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
             <Route path="/admin/utilizadores" element={<RoleRoute allow={["admin"]}><AdminUsers /></RoleRoute>} />
             <Route path="/admin/testes" element={<RoleRoute allow={["admin"]}><AdminUsers initialStatus="trial" /></RoleRoute>} />
             <Route path="/admin/clientes-pagantes" element={<RoleRoute allow={["admin"]}><AdminCustomers /></RoleRoute>} />
@@ -190,8 +199,11 @@ const App = () => (
               }
             />
             <Route path="/negocio" element={protectedPage(<BusinessInfo />)} />
+<<<<<<< HEAD
             <Route path="/mensagens-boas-vindas" element={protectedPage(<WelcomeMessages />)} />
             <Route path="/voz" element={<ProtectedRoute><OnboardingGate><VoiceCloning /></OnboardingGate></ProtectedRoute>} />
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
             <Route path="/whatsapp" element={protectedPage(<MyWhatsApp />)} />
             <Route path="/pedidos" element={protectedPage(<Orders />)} />
             <Route path="/atendente" element={protectedPage(<AttendantDashboard />)} />

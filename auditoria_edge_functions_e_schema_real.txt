@@ -1,0 +1,288 @@
+Auditoria consolidada por blocos do projeto atual
+
+Escopo verificado:
+- subscribe
+- criação de usuário
+- email verification
+- triggers de email
+- créditos / trial
+- password reset
+- config.toml e secrets
+- segurança e fluxo real de dados
+
+Base de análise (código real atual e migrações relevantes):
+- supabase/functions/subscribe/index.ts
+- src/lib/web-push.ts
+- supabase/migrations/20260818000000_commercial_activation_flow.sql
+- supabase/migrations/20260819000000_email_verifications.sql
+- supabase/migrations/20260819010000_email_automation_triggers.sql
+- supabase/migrations/20260824000000_trial_starts_on_whatsapp_connection.sql
+- supabase/migrations/20260822010000_password_reset_otp.sql
+- supabase/functions/send-verification-code/index.ts
+- supabase/functions/verify-email-code/index.ts
+- src/lib/email-verification.ts
+- src/components/ProfileSheet.tsx
+- supabase/functions/password-reset/index.ts
+- supabase/functions/send-email/index.ts
+- supabase/config.toml
+
+Resumo executivo
+- O projeto tem a funcionalidade principal implementada, mas o estado real do banco e do código é inconsistente em alguns pontos importantes.
+- O erro de contrato em subscribe está confirmado.
+- A função handle_new_user() foi redefinida em mais de uma migração, e a versão ativa no código atual depende da ordem de execução das migrações.
+- O mesmo vale para email_on_profile_created() e release_trial_credits_after_email_verification().
+- O config.toml real não inclui subscribe e password-reset, apesar de os arquivos existirem.
+- O fluxo de email e verificação por OTP está funcional no código atual, mas depende de secrets e Vault corretamente configurados.
+- O uso de service_role e security definer não é automaticamente um bug, mas o endpoint subscribe aceita user_id vindo do cliente e deve ser auditado.
+
+BLOCO 1 — subscribe
+Status: 🔴 ERRO CONFIRMADO
+
+Código real do frontend:
+- src/lib/web-push.ts
+- payload enviado para supabase.functions.invoke("subscribe"):
+  {
+    user_id: userId,
+    endpoint: subscription.endpoint,
+    keys: { p256dh, auth }
+  }
+
+Código real da Edge Function:
+- supabase/functions/subscribe/index.ts
+- ele faz:
+  const body = await req.json();
+  const subscription = body.subscription;
+  const user_id = body.user_id || null;
+
+  if (!subscription || !subscription.endpoint) {
+    return json({ error: "subscription object required" }, 400);
+  }
+
+Conclusão:
+- O frontend manda um payload sem item subscription.
+- A função espera body.subscription.
+- Isso gera incompatibilidade real e quebra o fluxo de persistência de push.
+
+Observação adicional:
+- A configuração atual de supabase/config.toml não inclui [functions.subscribe].
+- Isso não prova que a função não exista, mas confirma que ela não está registrada no config atual.
+
+BLOCO 2 — criação de usuário
+Status: 🟡 INCONSISTÊNCIA CONFIRMADA
+
+Há múltiplas versões de handle_new_user() em migrações diferentes.
+
+Versão em 20260818000000_commercial_activation_flow.sql:
+- account_status = 'trial'
+- message_limit = 50
+- messages_received = 0
+- free_messages_granted = true
+- insere credit_ledger (50, 'trial')
+
+Versão em 20260824000000_trial_starts_on_whatsapp_connection.sql:
+- account_status = 'trial'
+- message_limit = 0
+- messages_received = 0
+- free_messages_granted = false
+- não dá credit_ledger trial automaticamente
+
+No código atual, a migração mais recente redefine handle_new_user() para o comportamento de 0/false.
+
+Conclusão:
+- O comportamento real do cadastro depende da última migração aplicada no banco.
+- Isso é um problema histórico de inconsistência e não é uma decisão de design única.
+
+BLOCO 3 — email verification
+Status: ✅ FUNCIONAL NO CÓDIGO ATUAL, MAS COM COERÊNCIA DEPENDENTE DO FLUXO
+
+Frontend:
+- src/lib/email-verification.ts
+- src/components/ProfileSheet.tsx
+
+Fluxo real:
+- ao trocar email, o frontend grava:
+  profiles.pending_email = nextEmail
+  profiles.email_verified = false
+- depois chama send-verification-code
+- o usuário confirma usando verify-email-code
+
+Código da Edge Function:
+- supabase/functions/send-verification-code/index.ts
+- faz geração de OTP, grava em email_verifications e envia via send-email
+
+Código de confirmação:
+- supabase/functions/verify-email-code/index.ts
+- busca o código em email_verifications
+- compara hash SHA-256
+- se correto, atualiza auth.users pelo admin
+- atualiza profiles.email_verified = true
+- se for mudança de email, também faz:
+  profiles.email = targetEmail
+  profiles.pending_email = null
+
+Conclusão:
+- O fluxo do email de verificação está coerente no código atual.
+- O que existe de problema não é o mecanismo em si, mas a divergência histórica de funções anteriores.
+
+BLOCO 4 — triggers de email
+Status: 🟡 INCONSISTÊNCIA HISTÓRICA, MAS FLUXO ATUAL COERENTE
+
+Trigger atual do cadastro de perfil:
+- migration 20260819010000_email_automation_triggers.sql
+- function email_on_profile_created() chama:
+  public.invoke_email_edge_function('send-verification-code', ...)
+  public.dispatch_email_once('trial_start:' || new.user_id, ...)
+
+Mas a migration 20260824000000_trial_starts_on_whatsapp_connection.sql redefine email_on_profile_created() para:
+- somente chamar send-verification-code
+- sem enviar trial_start
+
+Conclusão:
+- A funcionalidade de email_trial_start não está ativa na versão final mais recente.
+- O comportamento real depende da última migração aplicada.
+
+Também existe o trigger de confirmação de email:
+- public.email_on_user_verified()
+- dispara quando auth.users.email_confirmed_at muda
+- envia welcome via dispatch_email_once
+
+Esse fluxo está bem definido no código atual e não há contradição interna imediata.
+
+BLOCO 5 — créditos / trial
+Status: 🔴 INCONSISTÊNCIA CONFIRMADA
+
+Migração de email verification:
+- supabase/migrations/20260819000000_email_verifications.sql
+- function release_trial_credits_after_email_verification(p_user_id uuid)
+- faz insert em credit_ledger com amount 50, credit_type 'trial'
+- atualiza profiles.message_limit e free_messages_granted
+
+Migração posterior:
+- 20260824000000_trial_starts_on_whatsapp_connection.sql
+- a mesma função foi redefinida para:
+  return jsonb_build_object('ok', true, 'credits_added', false);
+
+Conclusão:
+- Há conflito real entre versões.
+- O comportamento atual mais recente remove a concessão de trial credits da função.
+- Também não há chamada desta função em verify-email-code/index.ts.
+- Ou seja, a função pode estar obsoleta e não estar sendo utilizada no fluxo principal.
+
+BLOCO 6 — password reset
+Status: ✅ FLUXO IMPLEMENTADO, CONFIG MISSING CONFIRMADA
+
+Código atual:
+- supabase/functions/password-reset/index.ts
+- fluxo real:
+  - action=request -> gera código temporário em password_reset_codes
+  - action=verify -> valida código e cria reset_token em password_reset_tokens
+  - action=update -> atualiza password via admin.auth.admin.updateUserById
+
+Frontend:
+- src/pages/PasswordRecovery.tsx
+- chama invoke("password-reset", ...) com action request/verify/update
+
+No config.toml real:
+- [functions.send-verification-code]
+- [functions.verify-email-code]
+- não há [functions.password-reset]
+
+Conclusão:
+- O fluxo existe e funciona no código.
+- A ausência no config.toml é um problema de deploy/configuração e não de lógica do próprio código.
+
+BLOCO 7 — config.toml e secrets
+Status: 🟠 VERIFICAÇÃO DE CONFIGURAÇÃO NECESSÁRIA
+
+Arquivo real:
+- supabase/config.toml
+
+Entradas existentes:
+- [functions.send-email]
+- [functions.send-verification-code]
+- [functions.verify-email-code]
+- [functions.commercial-flow]
+- outras funções internas
+
+Ausentes:
+- [functions.subscribe]
+- [functions.password-reset]
+
+Secrets e vars esperadas pelo código:
+- send-email/index.ts usa:
+  SUPABASE_SERVICE_ROLE_KEY,
+  ZEPTOMAIL_API_KEY,
+  ZEPTO_MAIL_ENDPOINT,
+  ZEPTO_MAIL_FROM,
+  ZEPTO_MAIL_FROM_NAME
+- password-reset/index.ts usa:
+  SUPABASE_URL,
+  SUPABASE_SERVICE_ROLE_KEY
+- send-verification-code/index.ts usa:
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY,
+  SUPABASE_SERVICE_ROLE_KEY
+- verify-email-code/index.ts usa:
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY,
+  SUPABASE_SERVICE_ROLE_KEY
+
+Conclusão:
+- Os nomes esperados são consistentes com o código.
+- O problema real está na ausência de registro/deploy em config.toml, e no requisito de que os secrets estejam presentes no ambiente real.
+
+BLOCO 8 — security / service_role
+Status: 🟠 POSSÍVEL PROBLEMA DE VALIDAÇÃO, NÃO É CONCLUSÃO ABSOLUTA
+
+Ponto mais sensível:
+- subscribe/index.ts aceita body.user_id do cliente diretamente.
+- faz:
+  const user_id = body.user_id || null;
+- depois insere/atualiza em web_push_subscriptions com service_role.
+
+Isso significa que um cliente pode tentar forçar um user_id arbitrário.
+
+Mas precisamos distinguir:
+- risco de abuso real: depende da validação que o backend faz antes do insert
+- no código atual, essa validação não existe
+
+Conclusão:
+- Não é um bug absoluto sem contexto mais profundo do ambiente e das policies.
+- Mas é um ponto de auditoria de segurança real, especialmente para o fluxo subscribe.
+
+BLOCO 9 — estados de email no perfil
+Status: ✅ FLUXO ATUAL COERENTE
+
+No código real:
+- ProfileSheet.tsx atualiza pending_email + email_verified=false quando troca o email.
+- verify-email-code/index.ts, após validação correta, faz:
+  profiles.email_verified = true
+  profiles.pending_email = null
+  profiles.email = targetEmail (quando for troca de email)
+- auth.users.email_confirmado também é atualizado via updateUserById
+
+Conclusão:
+- O fluxo de sincronização do email atual e do pending_email está coerente na implementação atual.
+- Não há evidência de bug em parte desta cadeia, a menos que exista um banco antigo com estruturas divergentes.
+
+Conclusão final
+- O projeto tem fluxos reais implementados para subscribe, OTP, password reset, email, push e trial.
+- Os erros confirmados são:
+  1. subscribe payload mismatch
+  2. múltiplas versões históricas de handle_new_user()
+  3. múltiplas versões históricas de email_on_profile_created()
+  4. múltiplas versões históricas de release_trial_credits_after_email_verification()
+  5. config.toml incompleto para subscribe e password-reset
+
+- Os pontos que precisam de validação são:
+  - se o banco real está na migração mais recente
+  - se secrets e Vault estão de fato configurados
+  - se subscribe pode sofrer abuso por user_id arbitrário vindo do cliente
+
+- O que está correto no código atual:
+  - fluxo de email de verificação
+  - fluxo de password reset
+  - lógica de confirmação de email e pending_email
+  - normalização do payload de email
+
+Esse diagnóstico foi feito sobre o código e as migrações atuais, sem implementar correções.

@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import { useEffect, useMemo, useRef, useState } from "react";
+=======
+import { useEffect, useMemo, useState } from "react";
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
 import { useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,6 +21,7 @@ import {
 } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+<<<<<<< HEAD
 import { ShoppingCart, Plus, Minus, Trash2, Star, Send, Search, ListFilter, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -27,6 +32,11 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+=======
+import { ShoppingCart, Plus, Minus, Trash2, Star, Send } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
 
 type StoreRow = {
   id: string;
@@ -37,10 +47,14 @@ type StoreRow = {
   description: string | null;
   theme_color: string | null;
   header_color: string | null;
+<<<<<<< HEAD
   logo_size?: number | null;
   hide_store_name?: boolean | null;
 };
 type ProductMedia = { url: string; media_type: "image" | "video"; color: string | null; size: string | null; position: number };
+=======
+};
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
 type Product = {
   id: string;
   name: string;
@@ -49,13 +63,19 @@ type Product = {
   discount_price: number | null;
   image_url: string | null;
   image_urls?: string[];
+<<<<<<< HEAD
   media_items?: ProductMedia[];
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
   stock: number | null;
   is_sold_out: boolean;
   category_ids: string[] | null;
   rating_avg: number;
   rating_count: number;
+<<<<<<< HEAD
   created_at?: string;
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
 };
 type Category = { id: string; name: string };
 type Slide = {
@@ -115,6 +135,7 @@ export default function PublicStore() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [slides, setSlides] = useState<Slide[]>([]);
   const [activeCat, setActiveCat] = useState<string>("all");
+<<<<<<< HEAD
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
@@ -124,6 +145,10 @@ export default function PublicStore() {
   const [openP, setOpenP] = useState<Product | null>(null);
   const [detailMediaIndex, setDetailMediaIndex] = useState(0);
   const detailMediaRef = useRef<HTMLDivElement>(null);
+=======
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [openP, setOpenP] = useState<Product | null>(null);
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
   const [reviews, setReviews] = useState<Review[]>([]);
   const [reviewForm, setReviewForm] = useState({
     name: "",
@@ -140,7 +165,11 @@ export default function PublicStore() {
       const { data: s } = await supabase
         .from("stores")
         .select(
+<<<<<<< HEAD
           "id,user_id,name,logo_url,logo_size,hide_store_name,checkout_whatsapp,description,theme_color,header_color",
+=======
+          "id,user_id,name,logo_url,checkout_whatsapp,description,theme_color,header_color",
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
         )
         .eq("slug", slug || "")
         .eq("is_active", true)
@@ -153,7 +182,11 @@ export default function PublicStore() {
           supabase
             .from("products")
             .select(
+<<<<<<< HEAD
               "id,name,description,price,discount_price,image_url,stock,is_sold_out,category_ids,rating_avg,rating_count,created_at",
+=======
+              "id,name,description,price,discount_price,image_url,stock,is_sold_out,category_ids,rating_avg,rating_count",
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
             )
             .eq("store_id", sid)
             .eq("is_active", true),
@@ -167,6 +200,7 @@ export default function PublicStore() {
             .select("id,title,subtitle,image_url,bg_color")
             .eq("store_id", sid)
             .order("position"),
+<<<<<<< HEAD
           supabase.from("product_images").select("product_id,url,position,media_type,color,size").order("position"),
         ]);
         const productImages = (pi.data as Array<{ product_id: string; url: string; position: number; media_type?: string | null; color?: string | null; size?: string | null }> | null) || [];
@@ -182,6 +216,12 @@ export default function PublicStore() {
           const assets = mediaItems.length ? mediaItems : fallback;
           return { ...product, media_items: assets, image_urls: assets.filter((media) => media.media_type === "image").map((media) => media.url) };
         }));
+=======
+          supabase.from("product_images").select("product_id,url,position").order("position"),
+        ]);
+        const productImages = (pi.data as Array<{ product_id: string; url: string }> | null) || [];
+        setProducts(((p.data as Product[]) || []).map((product) => ({ ...product, image_urls: productImages.filter((image) => image.product_id === product.id).map((image) => image.url) })));
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
         setCategories((c.data as any) || []);
         setSlides((sl.data as any) || []);
       }
@@ -201,6 +241,7 @@ export default function PublicStore() {
   }, [slides.length]);
 
   const filtered = useMemo(
+<<<<<<< HEAD
     () => {
       const term = search.trim().toLocaleLowerCase();
       const result = products.filter((product) => {
@@ -219,6 +260,13 @@ export default function PublicStore() {
       return result;
     },
     [activeCat, availability, products, search, sortBy],
+=======
+    () =>
+      activeCat === "all"
+        ? products
+        : products.filter((p) => (p.category_ids || []).includes(activeCat)),
+    [activeCat, products],
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
   );
   const total = useMemo(
     () =>
@@ -272,6 +320,7 @@ export default function PublicStore() {
       .limit(50);
     setReviews((data as any) || []);
   };
+<<<<<<< HEAD
   const moveSlide = (offset: -1 | 1) => setSlideIdx((index) => (index + offset + slides.length) % slides.length);
   const relatedProducts = openP
     ? products.filter((product) => product.id !== openP.id && (product.category_ids || []).some((id) => (openP.category_ids || []).includes(id))).slice(0, 4)
@@ -293,6 +342,8 @@ export default function PublicStore() {
     setDetailMediaIndex(0);
     detailMediaRef.current?.scrollTo({ left: 0 });
   }, [openP?.id]);
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
 
   const submitReview = async () => {
     if (!openP || !reviewForm.comment.trim()) return;
@@ -328,6 +379,7 @@ export default function PublicStore() {
 
   const themed = store.theme_color || "#16a34a";
   const headerBg = store.header_color || themed;
+<<<<<<< HEAD
   const setQuickFilter = (value: string) => {
     if (value === "top_rated") {
       setAvailability("all");
@@ -338,6 +390,8 @@ export default function PublicStore() {
     if (sortBy === "rating") setSortBy("featured");
   };
   const activeQuickFilter = sortBy === "rating" && availability === "all" ? "top_rated" : availability;
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -346,18 +400,33 @@ export default function PublicStore() {
         className="sticky top-0 z-30 shadow-sm"
         style={{ backgroundColor: headerBg }}
       >
+<<<<<<< HEAD
         <div className="relative mx-auto grid max-w-screen-2xl grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-3 px-4 py-3 text-white lg:grid-cols-[minmax(180px,auto)_minmax(280px,1fr)_auto]">
           <div className="flex min-w-0 items-center gap-3">
+=======
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 text-white">
+          <div className="flex items-center gap-3 min-w-0">
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
             {store.logo_url && (
               <img
                 src={store.logo_url}
                 alt={store.name}
+<<<<<<< HEAD
                 className="w-auto max-w-[34vw] object-contain lg:max-w-[280px]"
                 style={{ height: Math.max(32, Math.min(160, store.logo_size || 64)) }}
               />
             )}
             <div className="min-w-0">
               {!store.hide_store_name && <h1 className="truncate text-lg font-bold sm:text-xl">{store.name}</h1>}
+=======
+                className="h-10 w-auto max-w-[80px] object-contain"
+              />
+            )}
+            <div className="min-w-0">
+              <h1 className="truncate text-lg font-bold sm:text-xl">
+                {store.name}
+              </h1>
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
               {store.description && (
                 <p className="hidden truncate text-xs opacity-90 sm:block">
                   {store.description}
@@ -365,6 +434,7 @@ export default function PublicStore() {
               )}
             </div>
           </div>
+<<<<<<< HEAD
           <div className="col-start-2 flex min-w-0 items-center justify-end gap-2 lg:col-auto">
             <Button type="button" variant="secondary" size="icon" className="lg:hidden" aria-label="Abrir pesquisa" onClick={() => setMobileSearchOpen(true)}>
               <Search className="h-4 w-4" />
@@ -395,6 +465,11 @@ export default function PublicStore() {
           <Sheet open={cartOpen} onOpenChange={setCartOpen}>
             <SheetTrigger asChild>
               <Button variant="secondary" className="hidden gap-2 relative lg:flex">
+=======
+          <Sheet open={cartOpen} onOpenChange={setCartOpen}>
+            <SheetTrigger asChild>
+              <Button variant="secondary" className="gap-2 relative">
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
                 <ShoppingCart className="h-4 w-4" />
                 <span className="hidden sm:inline">Carrinho</span>
                 {cart.length > 0 && (
@@ -499,6 +574,7 @@ export default function PublicStore() {
               )}
             </SheetContent>
           </Sheet>
+<<<<<<< HEAD
           {mobileSearchOpen && (
             <div className="absolute inset-0 z-20 flex items-center gap-2 px-4 lg:hidden" style={{ backgroundColor: headerBg }}>
               <div className="relative min-w-0 flex-1">
@@ -524,6 +600,12 @@ export default function PublicStore() {
       </header>
 
       <main className="mx-auto max-w-screen-2xl px-3 py-4 sm:px-6 sm:py-6 space-y-5">
+=======
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-6xl px-3 py-4 sm:px-4 sm:py-6 space-y-5">
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
         {/* CAROUSEL */}
         {slides.length > 0 && (
           <div className="relative overflow-hidden rounded-xl">
@@ -532,6 +614,7 @@ export default function PublicStore() {
               style={{ transform: `translateX(-${slideIdx * 100}%)` }}
             >
               {slides.map((s) => (
+<<<<<<< HEAD
                 <a
                 key={s.id}
                 href={s.link_url || undefined}
@@ -550,6 +633,36 @@ export default function PublicStore() {
               <>
               <button type="button" onClick={() => moveSlide(-1)} aria-label="Slide anterior" className="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white hover:bg-black/65"><ChevronLeft className="h-5 w-5" /></button>
               <button type="button" onClick={() => moveSlide(1)} aria-label="Próximo slide" className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white hover:bg-black/65"><ChevronRight className="h-5 w-5" /></button>
+=======
+                <div
+                  key={s.id}
+                  className="w-full shrink-0"
+                  style={{ backgroundColor: s.bg_color || themed }}
+                >
+                  <div className="flex items-center gap-4 p-5 text-white sm:p-8 min-h-[140px] sm:min-h-[180px]">
+                    {s.image_url && (
+                      <img
+                        src={s.image_url}
+                        alt=""
+                        className="h-20 w-20 shrink-0 rounded-lg object-cover sm:h-28 sm:w-28"
+                      />
+                    )}
+                    <div className="min-w-0">
+                      <div className="text-lg font-bold sm:text-2xl line-clamp-2">
+                        {s.title}
+                      </div>
+                      {s.subtitle && (
+                        <div className="mt-1 text-sm opacity-90 sm:text-base line-clamp-2">
+                          {s.subtitle}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {slides.length > 1 && (
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
               <div className="absolute inset-x-0 bottom-2 flex justify-center gap-1.5">
                 {slides.map((_, i) => (
                   <button
@@ -559,12 +672,16 @@ export default function PublicStore() {
                   />
                 ))}
               </div>
+<<<<<<< HEAD
               </>
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
             )}
           </div>
         )}
 
         {/* CATEGORIES */}
+<<<<<<< HEAD
         <div className="flex min-w-0 items-center gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -590,10 +707,34 @@ export default function PublicStore() {
                   className={`shrink-0 rounded-full border px-4 py-1.5 text-sm font-medium ${activeCat === "all" ? "text-white" : "bg-background"}`}
                   style={
                     activeCat === "all"
+=======
+        {categories.length > 0 && (
+          <div className="-mx-3 overflow-x-auto px-3 sm:mx-0 sm:px-0">
+            <div className="flex gap-2 pb-1">
+              <button
+                onClick={() => setActiveCat("all")}
+                className={`shrink-0 rounded-full border px-4 py-1.5 text-sm font-medium ${activeCat === "all" ? "text-white" : "bg-background"}`}
+                style={
+                  activeCat === "all"
+                    ? { backgroundColor: themed, borderColor: themed }
+                    : {}
+                }
+              >
+                Todos
+              </button>
+              {categories.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => setActiveCat(c.id)}
+                  className={`shrink-0 rounded-full border px-4 py-1.5 text-sm font-medium ${activeCat === c.id ? "text-white" : "bg-background"}`}
+                  style={
+                    activeCat === c.id
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
                       ? { backgroundColor: themed, borderColor: themed }
                       : {}
                   }
                 >
+<<<<<<< HEAD
                   Todos
                 </button>
                 {categories.map((c) => (
@@ -621,6 +762,20 @@ export default function PublicStore() {
             const hasDiscount =
               p.discount_price && Number(p.discount_price) < Number(p.price);
             const cardMedia = p.media_items?.find((media) => media.media_type === "image") || p.media_items?.[0];
+=======
+                  {c.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* PRODUCTS */}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {filtered.map((p) => {
+            const hasDiscount =
+              p.discount_price && Number(p.discount_price) < Number(p.price);
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
             return (
               <Card
                 key={p.id}
@@ -628,6 +783,7 @@ export default function PublicStore() {
                 onClick={() => openProduct(p)}
               >
                 <div className="aspect-square relative bg-muted overflow-hidden">
+<<<<<<< HEAD
                   {cardMedia?.media_type === "video"
                     ? <video src={cardMedia.url} className="h-full w-full object-cover" muted playsInline />
                     : cardMedia?.url || p.image_url ? (
@@ -637,6 +793,15 @@ export default function PublicStore() {
                       className="h-full w-full object-cover transition group-hover:scale-105"
                     />
                     ) : null}
+=======
+                  {p.image_url && (
+                    <img
+                      src={p.image_url}
+                      alt={p.name}
+                      className="h-full w-full object-cover transition group-hover:scale-105"
+                    />
+                  )}
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
                   {hasDiscount && (
                     <span className="absolute left-2 top-2 rounded bg-destructive px-2 py-0.5 text-[10px] font-bold text-destructive-foreground">
                       PROMO
@@ -718,6 +883,7 @@ export default function PublicStore() {
 
       {/* PRODUCT DETAIL */}
       <Dialog open={!!openP} onOpenChange={() => setOpenP(null)}>
+<<<<<<< HEAD
         <DialogContent className="h-[94dvh] w-[96vw] max-w-[1440px] overflow-y-auto p-0">
           {openP && (
             <>
@@ -765,6 +931,16 @@ export default function PublicStore() {
                 </div>
                 <div className="space-y-4 p-4 sm:p-6">
                   <DialogHeader><DialogTitle className="text-2xl">{openP.name}</DialogTitle></DialogHeader>
+=======
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          {openP && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="line-clamp-2">{openP.name}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                {(openP.image_urls?.length ? openP.image_urls : openP.image_url ? [openP.image_url] : []).map((url) => <img key={url} src={url} alt={openP.name} className="aspect-square w-full rounded object-cover" />)}
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
                 <div className="flex items-center gap-2">
                   <Stars value={Math.round(openP.rating_avg || 0)} />
                   <span className="text-sm text-muted-foreground">
@@ -809,6 +985,7 @@ export default function PublicStore() {
                 >
                   {openP.is_sold_out ? "Esgotado" : "Adicionar ao carrinho"}
                 </Button>
+<<<<<<< HEAD
                 {relatedProducts.length > 0 && <section className="space-y-3 border-t pt-4">
                   <h3 className="font-semibold">Produtos relacionados</h3>
                   <div className="grid grid-cols-2 gap-2">
@@ -819,6 +996,8 @@ export default function PublicStore() {
                     </button>)}
                   </div>
                 </section>}
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
 
                 {/* REVIEWS */}
                 <div className="space-y-3 border-t pt-4">
@@ -881,7 +1060,10 @@ export default function PublicStore() {
                   ))}
                 </div>
               </div>
+<<<<<<< HEAD
               </div>
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
             </>
           )}
         </DialogContent>

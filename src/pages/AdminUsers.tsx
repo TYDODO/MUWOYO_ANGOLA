@@ -1,12 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+<<<<<<< HEAD
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
 import { RefreshCw } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import AdminShell from "@/components/AdminShell";
 import { supabase } from "@/integrations/supabase/client";
+<<<<<<< HEAD
 import { useToast } from "@/hooks/use-toast";
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
 
 type UserRow = {
   user_id: string;
@@ -44,6 +50,7 @@ export default function AdminUsers({ initialStatus = "all" }: { initialStatus?: 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
+<<<<<<< HEAD
   const [selectedPlanUser, setSelectedPlanUser] = useState<UserRow | null>(null);
   const [extensionMonths, setExtensionMonths] = useState(1);
   const [extendingPlan, setExtendingPlan] = useState(false);
@@ -78,6 +85,8 @@ export default function AdminUsers({ initialStatus = "all" }: { initialStatus?: 
       setExtendingPlan(false);
     }
   };
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
 
   useEffect(() => {
     void (async () => {
@@ -218,7 +227,10 @@ export default function AdminUsers({ initialStatus = "all" }: { initialStatus?: 
                   <th className="p-3">Estado</th>
                   <th className="p-3">Província</th>
                   <th className="p-3">Pagamentos</th>
+<<<<<<< HEAD
                   <th className="p-3">Ações</th>
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
                 </tr>
               </thead>
               <tbody>
@@ -231,6 +243,7 @@ export default function AdminUsers({ initialStatus = "all" }: { initialStatus?: 
                     <td className="p-3">{row.is_suspended || row.status === "suspended" ? "Suspenso" : isOperational(row) ? row.account_status === "trial" ? "Em teste" : "Ativo" : row.account_status === "awaiting_activation" ? "Aguardando ativação" : "Inativo"}</td>
                     <td className="p-3">{row.province || "—"}</td>
                     <td className="p-3">{currency(row.total_paid)}</td>
+<<<<<<< HEAD
                     <td className="p-3">
                       <Button
                         size="sm"
@@ -241,6 +254,8 @@ export default function AdminUsers({ initialStatus = "all" }: { initialStatus?: 
                         Adicionar meses
                       </Button>
                     </td>
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
                   </tr>
                 ))}
               </tbody>
@@ -248,6 +263,7 @@ export default function AdminUsers({ initialStatus = "all" }: { initialStatus?: 
             )}
           </CardContent>
       </Card>
+<<<<<<< HEAD
       <Dialog open={Boolean(selectedPlanUser)} onOpenChange={(open) => { if (!open && !extendingPlan) setSelectedPlanUser(null); }}>
         <DialogContent>
           <DialogHeader>
@@ -281,6 +297,8 @@ export default function AdminUsers({ initialStatus = "all" }: { initialStatus?: 
           </div>
         </DialogContent>
       </Dialog>
+=======
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
     </AdminShell>
   );
 }

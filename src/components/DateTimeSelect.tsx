@@ -37,7 +37,11 @@ export default function DateTimeSelect({ value, onChange, label = "Data e hora",
   const years = Array.from({ length: 6 }, (_, index) => currentYear + index);
   const days = Array.from({ length: 31 }, (_, index) => index + 1);
   const hours = Array.from({ length: 24 }, (_, index) => index);
+<<<<<<< HEAD
   const minutes = Array.from({ length: 60 }, (_, minute) => minute);
+=======
+  const minutes = [0, 15, 30, 45];
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
 
   return <div className="grid gap-2">
     <Label>{label}</Label>

@@ -14,15 +14,22 @@ type TopUpPack = {
 };
 
 const defaultPacks: TopUpPack[] = [
+<<<<<<< HEAD
   { id: "start", name: "Muwoyo Start", messages: 500, price_kz: 12499, position: 1 },
   { id: "growth", name: "Muwoyo Growth", messages: 1000, price_kz: 23999, position: 2 },
   { id: "big", name: "Muwoyo Big", messages: 2500, price_kz: 44999, position: 3 },
+=======
+  { id: "start", name: "Muwoyo Start", messages: 500, price_kz: 12999, position: 1 },
+  { id: "growth", name: "Muwoyo Growth", messages: 1000, price_kz: 19999, position: 2 },
+  { id: "big", name: "Muwoyo Big", messages: 2500, price_kz: 34999, position: 3 },
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
   { id: "enterprise", name: "Enterprise", messages: 2147483647, price_kz: 0, position: 4 },
 ];
 
 const packDetails: Record<string, { description: string; benefits: string[] }> = {
   "Muwoyo Start": {
     description: "500 créditos de IA por mês",
+<<<<<<< HEAD
     benefits: ["500 créditos de IA", "0 minutos de áudio", "Áudio indisponível neste plano", "1 agente de IA", "Base de conhecimento da IA", "Gestão de contactos", "Pedidos", "1 loja online", "Domínio padrão Muwoyo", "Afiliados", "1 utilizador", "Até 50 produtos", "Transferência de atendimento para humano"],
   },
   "Muwoyo Growth": {
@@ -36,6 +43,21 @@ const packDetails: Record<string, { description: string; benefits: string[] }> =
   Enterprise: {
     description: "Funcionalidades ilimitadas",
     benefits: ["Créditos de IA ilimitados", "Clonagem de Voz e Áudios ilimitados", "Agentes de IA ilimitados", "Produtos ilimitados", "Utilizadores ilimitados", "Lojas ilimitadas", "Domínios personalizados", "SEO avançado", "Inbox ilimitado", "Shared Inbox", "Todas as funcionalidades", "Suporte dedicado"],
+=======
+    benefits: ["500 créditos de IA", "1 agente de IA", "Base de conhecimento da IA", "Gestão de contactos", "Pedidos", "1 loja online", "Domínio padrão Muwoyo", "Afiliados", "1 utilizador", "Até 50 produtos", "Transferência de atendimento para humano"],
+  },
+  "Muwoyo Growth": {
+    description: "1 000 créditos de IA por mês",
+    benefits: ["1.000 créditos de IA", "2 agentes de IA", "Agente de Atendimento", "Agente de Follow Up", "Base de conhecimento da IA", "Gestão de contactos", "Pedidos", "Agenda", "Transferência para humano", "Loja online", "Domínio padrão Muwoyo", "Afiliados", "3 utilizadores", "Inbox", "Até 150 produtos"],
+  },
+  "Muwoyo Big": {
+    description: "2 500 créditos de IA por mês",
+    benefits: ["2.500 créditos de IA", "2 agentes de IA", "Agente de Atendimento", "Agente de Follow Up", "Até 500 produtos", "Loja online avançada", "Domínio personalizado", "10 utilizadores", "Gestão de contactos", "Pedidos", "Agenda", "Transferência para humano", "Afiliados", "Shared Inbox", "SEO da loja"],
+  },
+  Enterprise: {
+    description: "Funcionalidades ilimitadas",
+    benefits: ["Créditos de IA ilimitados", "Agentes de IA ilimitados", "Produtos ilimitados", "Utilizadores ilimitados", "Lojas ilimitadas", "Domínios personalizados", "SEO avançado", "Inbox ilimitado", "Shared Inbox", "Todas as funcionalidades", "Suporte dedicado"],
+>>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
   },
 };
 
