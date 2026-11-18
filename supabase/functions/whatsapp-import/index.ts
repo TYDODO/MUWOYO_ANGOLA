@@ -1,8 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-<<<<<<< HEAD
 import { syncWhatsAppLabels } from "../_shared/whatsapp-labels.ts";
-=======
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -108,11 +105,7 @@ Deno.serve(async (req) => {
       if (!phone || !/^[1-9][0-9]{7,14}$/.test(phone)) continue;
       const name = [contact.pushName, contact.name, contact.notify, contact.verifiedBizName]
         .find((value): value is string => typeof value === "string" && value.length > 0) || null;
-<<<<<<< HEAD
       const { data: savedContact, error: upsertError } = await admin.from("whatsapp_contacts").upsert(
-=======
-      const { error: upsertError } = await admin.from("whatsapp_contacts").upsert(
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
         {
           user_id: userId,
           instance_name: instanceName,
@@ -126,19 +119,12 @@ Deno.serve(async (req) => {
           ...(name ? { name: String(name) } : {}),
         },
         { onConflict: "user_id,instance_name,phone_number" },
-<<<<<<< HEAD
       ).select("id").single();
-=======
-      );
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
       if (upsertError) {
         console.error("whatsapp_import_contact_save_failed", JSON.stringify({ instanceName, code: upsertError.code, message: upsertError.message }));
         return json({ error: "whatsapp_contact_save_failed", imported }, 500);
       }
-<<<<<<< HEAD
       if (savedContact?.id) await syncWhatsAppLabels(admin, userId, savedContact.id, contact.labels);
-=======
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
       imported += 1;
     }
 

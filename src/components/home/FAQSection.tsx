@@ -8,7 +8,6 @@ import { trackMetaEvent } from "@/lib/meta-pixel";
 
 const faqs = [
   {
-<<<<<<< HEAD
     question: "O que posso fazer com a Muwoyo?",
     answer: "A Muwoyo reúne atendimento automatizado com IA no WhatsApp, CRM, Inbox para a equipa, campanhas, produtos, loja online, pedidos, entregas, agendamentos e relatórios. A disponibilidade de algumas funcionalidades depende do plano activo.",
   },
@@ -68,80 +67,6 @@ const faqs = [
     question: "Como posso contactar o suporte?",
     answer: "Use o botão “Falar com suporte” na página ou contacte a equipa pelo WhatsApp. O suporte atende em português.",
   },
-=======
-    question: "A Muwoyo cobra mensalidade?",
-    answer: "Sim. Depois dos 3 dias de teste, escolha um plano mensal conforme o volume do seu negócio.",
-  },
-  {
-    question: "Como funcionam as 100 mensagens gratuitas?",
-    answer: "O teste começa quando você confirma o email. A partir desse momento, tem 3 dias e até 100 mensagens para testar a Muwoyo.",
-  },
-  {
-    question: "O que recebo depois de ativar a conta?",
-    answer: "Depois da confirmação do pagamento, o plano escolhido fica ativo por 30 dias e renova mediante novo pagamento.",
-  },
-  {
-    question: "As mensagens têm validade?",
-    answer: "O teste termina após 3 dias ou quando as 100 mensagens forem utilizadas. Cada plano pago tem o seu limite mensal.",
-  },
-  {
-    question: "O que acontece quando as minhas mensagens terminarem?",
-    answer: "Pode escolher outro plano ou enviar um novo comprovativo quando o ciclo mensal terminar.",
-  },
-  {
-    question: "Como a IA conhece o meu negócio?",
-    answer: "Você fornece informações como produtos, preços, serviços, horários, regras e outras informações relevantes. A Muwoyo utiliza esses dados para ajudar a IA a responder aos clientes com contexto.",
-  },
-  {
-    question: "Preciso de várias ferramentas externas?",
-    answer: "Não. A Muwoyo já reúne várias funções essenciais. Quando uma ferramenta externa for necessária, a plataforma pode trabalhar através das integrações disponíveis.",
-  },
-  {
-    question: "Como funciona a loja online?",
-    answer: "A Muwoyo permite criar uma loja online personalizada para apresentar produtos, com link próprio, QR Code e ligação ao WhatsApp.",
-  },
-  {
-    question: "O suporte é em português?",
-    answer: "Sim. A equipa da Muwoyo presta suporte em português.",
-  },
-/*
-  {
-    question: "A IA consegue entender diferentes sotaques e dialetos?",
-    answer:
-      "Sim! Nossa IA é treinada para compreender diversos sotaques e dialetos do português, incluindo variações de Angola, Portugal e Moçambique. Ela aprende com cada interação para melhorar ainda mais o atendimento.",
-  },
-  {
-    question: "Posso integrar a Muwoyo com meus sistemas atuais?",
-    answer:
-      "Sim! A Muwoyo oferece integrações com Google Sheets, Google Analytics, Google Calendar e muitas outras ferramentas através de API. Também é possível fazer integrações personalizadas conforme suas necessidades.",
-  },
-  {
-    question: "Como é feito o treinamento da IA para meu negócio?",
-    answer:
-      "O treinamento é simples! Você fornece informações sobre seus produtos, serviços, preços e tom de voz desejado. Nossa IA analisa esse conteúdo e cria respostas personalizadas. Quanto mais informações você fornecer, melhor será o atendimento.",
-  },
-  {
-    question: "O que acontece se eu atingir o limite de mensagens?",
-    answer:
-      "Você receberá notificações quando estiver próximo do limite. Após atingir o limite, a IA continuará respondendo, mas você será notificado para fazer upgrade. Nenhuma conversa será perdida e seus clientes sempre serão atendidos.",
-  },
-  {
-    question: "Como funciona a loja online incluída?",
-    answer:
-      "A loja online é um bônus exclusivo para assinantes Muwoyo. Ela vem personalizada com sua marca (logo e cores), permite cadastro ilimitado de produtos, aceita pagamentos via transferência bancária e é totalmente integrada ao WhatsApp para automação de vendas.",
-  },
-  {
-    question: "Posso cancelar a qualquer momento?",
-    answer:
-      "Sim! Você pode cancelar sua assinatura a qualquer momento diretamente no painel de controle. O cancelamento entra em vigor no final do período de faturamento atual, então você não perde nenhum dia pago. Não há multas ou taxas de cancelamento.",
-  },
-  {
-    question: "O suporte é em português?",
-    answer:
-      "Sim! Todo nosso suporte é em português nativo, com atendimento via WhatsApp, email e chat. Nossa equipe está disponível para ajudar com configuração, dúvidas técnicas e estratégias para maximizar seus resultados com a Muwoyo.",
-  },
-*/
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
 ];
 
 const FAQSection = () => {
@@ -157,18 +82,10 @@ const FAQSection = () => {
             Perguntas Frequentes
           </p>
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold mb-6">
-<<<<<<< HEAD
             Esclareça as suas <span className="gradient-text">dúvidas</span>
           </h2>
           <p className="text-lg text-muted-foreground">
             Respostas sobre a plataforma, os planos e as ferramentas da Muwoyo.
-=======
-            Tire suas <span className="gradient-text">dúvidas</span>
-          </h2>
-          <p className="text-lg text-muted-foreground">
-            Tudo o que você precisa saber sobre a Muwoyo e como ela pode
-            transformar seu negócio.
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
           </p>
         </div>
 
@@ -193,11 +110,7 @@ const FAQSection = () => {
 
         <div className="text-center mt-12">
           <p className="text-muted-foreground mb-4">
-<<<<<<< HEAD
             Ainda tem dúvidas? Fale com a nossa equipa de suporte.
-=======
-            Ainda tem dúvidas? Entre em contato com nosso suporte
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
           </p>
           <a
             href="https://wa.me/244962011401"

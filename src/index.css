@@ -2,15 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
-<<<<<<< HEAD
 @keyframes logo-scroll {
   to {
     transform: translateX(-50%);
   }
 }
 
-=======
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
 @layer components {
   [data-inbox] > div:first-child {
     border: 0;

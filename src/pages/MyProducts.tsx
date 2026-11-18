@@ -13,7 +13,6 @@ import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, AlertCircle, X } from "lucide-react";
 
 type Category = { id: string; name: string };
-<<<<<<< HEAD
 type ProductMedia = { url: string; media_type: "image" | "video"; color: string; size: string };
 type Product = {
   id: string; name: string; description: string | null; price: number; discount_price: number | null;
@@ -21,14 +20,6 @@ type Product = {
 };
 
 const emptyForm = { name: "", description: "", price: "", discount_price: "", stock: "", image_url: "", image_urls: [] as string[], media_items: [] as ProductMedia[], category_ids: [] as string[], is_sold_out: false };
-=======
-type Product = {
-  id: string; name: string; description: string | null; price: number; discount_price: number | null;
-  stock: number; image_url: string | null; image_urls?: string[]; is_sold_out: boolean; category_ids: string[] | null; rating_avg: number; rating_count: number;
-};
-
-const emptyForm = { name: "", description: "", price: "", discount_price: "", stock: "", image_url: "", image_urls: [] as string[], category_ids: [] as string[], is_sold_out: false };
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
 
 export default function MyProducts() {
   const { user } = useAuth(); const { toast } = useToast();
@@ -52,7 +43,6 @@ export default function MyProducts() {
     const { data: c } = await supabase.from("categories").select("id,name").eq("user_id", user.id).order("name");
     setCategories((c as any) || []);
     const { data: p } = await supabase.from("products").select("id,name,description,price,discount_price,stock,image_url,is_sold_out,category_ids,rating_avg,rating_count").eq("user_id", user.id).order("created_at", { ascending: false });
-<<<<<<< HEAD
     const productIds = (p || []).map((product) => product.id);
     const { data: images, error: imagesError } = productIds.length
       ? await supabase.from("product_images").select("product_id,url,position,media_type,color,size").in("product_id", productIds).order("position")
@@ -71,21 +61,13 @@ export default function MyProducts() {
       const fallbackMedia = product.image_url ? [{ url: product.image_url, media_type: "image" as const, color: "", size: "" }] : [];
       return { ...product, media_items: mediaItems.length ? mediaItems : fallbackMedia, image_urls: (mediaItems.length ? mediaItems : fallbackMedia).filter((item) => item.media_type === "image").map((item) => item.url) };
     }));
-=======
-    const { data: images } = await supabase.from("product_images").select("product_id,url,position").in("product_id", (p || []).map((product) => product.id)).order("position");
-    setProducts(((p || []) as Product[]).map((product) => ({ ...product, image_urls: (images || []).filter((image) => image.product_id === product.id).map((image) => image.url) })));
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
   };
   useEffect(() => { load(); }, [user]);
 
   const uploadImage = async (file: File) => {
     if (!user) return null;
-<<<<<<< HEAD
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
     const path = `${user.id}/products/${crypto.randomUUID()}-${safeName}`;
-=======
-    const path = `${user.id}/products/${Date.now()}-${file.name}`;
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
     const { error } = await supabase.storage.from("store-assets").upload(path, file, { upsert: true });
     if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return null; }
     return supabase.storage.from("store-assets").getPublicUrl(path).data.publicUrl;
@@ -106,14 +88,10 @@ export default function MyProducts() {
       name: p.name, description: p.description || "", price: String(p.price ?? ""),
       discount_price: p.discount_price ? String(p.discount_price) : "",
       stock: String(p.stock ?? 0), image_url: p.image_url || "",
-<<<<<<< HEAD
       category_ids: p.category_ids || [],
       image_urls: p.image_urls || (p.image_url ? [p.image_url] : []),
       media_items: p.media_items || (p.image_url ? [{ url: p.image_url, media_type: "image", color: "", size: "" }] : []),
       is_sold_out: p.is_sold_out,
-=======
-      category_ids: p.category_ids || [], image_urls: p.image_urls || (p.image_url ? [p.image_url] : []), is_sold_out: p.is_sold_out,
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
     });
     setOpen(true);
   };
@@ -125,17 +103,12 @@ export default function MyProducts() {
     const payload = {
       user_id: user.id, store_id: storeId, name: form.name, description: form.description,
       price: Number(form.price || 0), discount_price: form.discount_price ? Number(form.discount_price) : null,
-<<<<<<< HEAD
       stock: Number(form.stock || 0), image_url: form.media_items.find((item) => item.media_type === "image")?.url || form.image_url || null,
-=======
-      stock: Number(form.stock || 0), image_url: form.image_urls[0] || form.image_url || null,
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
       category_ids: form.category_ids, is_sold_out: form.is_sold_out, is_active: true,
     };
     const result = editing ? await supabase.from("products").update(payload).eq("id", editing.id) : await supabase.from("products").insert(payload).select("id").single();
     const productId = editing?.id || result.data?.id;
     if (!result.error && productId) {
-<<<<<<< HEAD
       const { error: deleteMediaError } = await supabase.from("product_images").delete().eq("product_id", productId);
       if (deleteMediaError) {
         setBusy(false);
@@ -155,10 +128,6 @@ export default function MyProducts() {
           return toast({ title: "Não foi possível guardar a galeria", description: insertMediaError.message, variant: "destructive" });
         }
       }
-=======
-      await supabase.from("product_images").delete().eq("product_id", productId);
-      if (form.image_urls.length) await supabase.from("product_images").insert(form.image_urls.map((url, position) => ({ product_id: productId, url, position })));
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
     }
     const error = result.error;
     setBusy(false);
@@ -261,7 +230,6 @@ export default function MyProducts() {
 
             <div className="space-y-1.5">
               <Label>Imagens do produto</Label>
-<<<<<<< HEAD
               <Input type="file" accept="image/*,video/*" multiple onChange={async (e) => {
                 const files = Array.from(e.target.files || []);
                 const uploaded = await Promise.all(files.map(async (file) => {
@@ -297,12 +265,6 @@ export default function MyProducts() {
                       };
                     })}><X className="h-4 w-4 text-destructive" /></Button>
                   </div>)}
-=======
-              <Input type="file" accept="image/*" multiple onChange={async (e) => { const files = Array.from(e.target.files || []); const urls = (await Promise.all(files.map(uploadImage))).filter((url): url is string => Boolean(url)); setForm((current) => ({ ...current, image_url: current.image_urls[0] || urls[0] || current.image_url, image_urls: [...current.image_urls, ...urls] })); }} />
-              {form.image_urls.length > 0 && (
-                <div className="relative inline-block">
-                  <div className="flex flex-wrap gap-2">{form.image_urls.map((url, index) => <div key={url} className="relative"><img src={url} alt={`Imagem ${index + 1}`} className="h-20 w-20 rounded object-cover" /><button type="button" onClick={() => setForm((current) => ({ ...current, image_urls: current.image_urls.filter((item) => item !== url), image_url: current.image_urls[0] === url ? current.image_urls[1] || "" : current.image_url }))} className="absolute -right-2 -top-2 rounded-full bg-destructive p-1 text-destructive-foreground"><X className="h-3 w-3" /></button></div>)}</div>
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
                 </div>
               )}
             </div>

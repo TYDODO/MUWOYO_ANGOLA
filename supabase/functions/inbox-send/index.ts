@@ -105,7 +105,6 @@ Deno.serve(async (req) => {
       const fileName = String(body?.fileName || "media");
 
       if (kind === "audio") {
-<<<<<<< HEAD
         if (body?.isVoiceNote === true) {
           const audioPayload = mediaUrl
             ? { ...payloadBase, audio: mediaUrl, caption, ptt: true }
@@ -129,13 +128,6 @@ Deno.serve(async (req) => {
             }),
           });
         }
-=======
-        const audioPayload = mediaUrl ? { ...payloadBase, audio: mediaUrl, caption } : { ...payloadBase, audio: body?.audioBase64 || body?.base64 || "", caption };
-        sent = await evoFetch(`/message/sendWhatsAppAudio/${encodeURIComponent(instanceName)}`, {
-          method: "POST",
-          body: JSON.stringify(audioPayload),
-        });
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
       } else {
         sent = await evoFetch(`/message/sendMedia/${encodeURIComponent(instanceName)}`, {
           method: "POST",
@@ -166,11 +158,7 @@ Deno.serve(async (req) => {
           media_url: body?.mediaUrl || null,
           mime_type: body?.mimetype || null,
           file_name: body?.fileName || null,
-<<<<<<< HEAD
           is_voice_note: kind === "audio" && body?.isVoiceNote === true,
-=======
-          is_voice_note: kind === "audio",
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
           media_metadata: { caption: body?.caption || null, name: body?.fileName || null },
           delivery_status: "pending",
           whatsapp_instance_id: instanceName,
@@ -197,10 +185,7 @@ Deno.serve(async (req) => {
             media_url: body?.mediaUrl || null,
             mimetype: body?.mimetype || null,
             file_name: body?.fileName || null,
-<<<<<<< HEAD
             is_voice_note: kind === "audio" && body?.isVoiceNote === true,
-=======
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
           },
         });
         if (queueError) {
@@ -255,11 +240,7 @@ Deno.serve(async (req) => {
         storage_path: body?.storagePath || null,
         mime_type: body?.mimetype || null,
         file_name: body?.fileName || null,
-<<<<<<< HEAD
         is_voice_note: kind === "audio" && body?.isVoiceNote === true,
-=======
-        is_voice_note: kind === "audio",
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
         media_metadata: { caption: body?.caption || null, name: body?.fileName || null },
         delivery_status: "sent",
         whatsapp_instance_id: instanceName,

@@ -1,6 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { extractEvolutionMessageId, getScopedMessageKey, isEvolutionMessageFromMe, resolveDeliveryStatus, resolveMessageDirection } from "../../../src/lib/message-identity.ts";
-<<<<<<< HEAD
 import { isSafeWelcomeMediaUrl } from "../../../src/lib/welcome-media.ts";
 import { buildWelcomeSequenceItems } from "../../../src/lib/welcome-sequence.ts";
 import { DEFAULT_VOICE_TUNING, parseVoiceTuning } from "../../../src/lib/voice-tuning.ts";
@@ -8,10 +7,6 @@ import { extractEvolutionMediaBase64 } from "../_shared/evolution-media.ts";
 
 declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void };
 
-=======
-import { extractEvolutionMediaBase64 } from "../_shared/evolution-media.ts";
-
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "*",
@@ -171,7 +166,6 @@ async function dispatchToN8n(payload: any) {
   }
 }
 
-<<<<<<< HEAD
 async function sendFirstWelcomeSequence({
   instanceId,
   userId,
@@ -339,8 +333,6 @@ async function sendFirstWelcomeSequence({
   return { blocksForWelcome: true };
 }
 
-=======
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
 const logMessageSkip = (instanceName: string, messageId: string | null, reason: string) => {
   console.info(JSON.stringify({ event: "customer_message_skipped", instanceName, messageId, reason }));
 };
@@ -379,15 +371,9 @@ async function sendQueuedInboxMessages(instanceName: string) {
     if (kind === "text") {
       path = `/message/sendText/${encodeURIComponent(instanceName)}`;
       requestBody = { ...base, text: String(payload.message_text || "") };
-<<<<<<< HEAD
     } else if (kind === "audio" && payload.is_voice_note === true) {
       path = `/message/sendWhatsAppAudio/${encodeURIComponent(instanceName)}`;
       requestBody = { ...base, audio: String(payload.media_url || ""), caption: String(payload.caption || ""), ptt: true };
-=======
-    } else if (kind === "audio") {
-      path = `/message/sendWhatsAppAudio/${encodeURIComponent(instanceName)}`;
-      requestBody = { ...base, audio: String(payload.media_url || ""), caption: String(payload.caption || "") };
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
     } else if (kind === "sticker") {
       path = `/message/sendSticker/${encodeURIComponent(instanceName)}`;
       requestBody = { ...base, sticker: String(payload.media_url || "") };
@@ -400,10 +386,7 @@ async function sendQueuedInboxMessages(instanceName: string) {
         type: kind,
         fileName: String(payload.file_name || "media"),
         mimetype: String(payload.mimetype || "application/octet-stream"),
-<<<<<<< HEAD
         ...(kind === "audio" ? { ptt: false } : {}),
-=======
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
         ...(payload.caption ? { caption: String(payload.caption) } : {}),
       };
     }
@@ -739,7 +722,6 @@ Deno.serve(async (req) => {
           continue;
         }
 
-<<<<<<< HEAD
         const welcomeResult = await sendFirstWelcomeSequence({
           instanceId: inst.id,
           userId,
@@ -758,12 +740,6 @@ Deno.serve(async (req) => {
         const { data: profile, error: profileError } = await admin
           .from("profiles")
           .select("messages_received, message_limit, business_name, business_description, ai_name, ai_rules, business_hours, accepts_appointments, appointment_duration_minutes, account_status, subscription_expires_at")
-=======
-        // Check credits before dispatching to n8n
-        const { data: profile, error: profileError } = await admin
-          .from("profiles")
-          .select("messages_received, message_limit, business_name, business_description, ai_name, ai_rules, business_hours, accepts_appointments, appointment_duration_minutes")
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
           .eq("user_id", userId)
           .maybeSingle();
         if (profileError) throw profileError;
@@ -782,7 +758,6 @@ Deno.serve(async (req) => {
           continue;
         }
 
-<<<<<<< HEAD
         const [
           { data: audioBalance, error: audioBalanceError },
           { data: activeVoice, error: activeVoiceError },
@@ -828,21 +803,16 @@ Deno.serve(async (req) => {
           fish_model: "s2.1-pro-free",
           voice_tuning: voiceTuning,
         };
-=======
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
         // Build n8n payload
         const systemPrompt = [
           profile?.business_name ? `Empresa: ${profile.business_name}` : "",
           profile?.business_description ? `Sobre: ${profile.business_description}` : "",
           profile?.ai_name ? `Você é ${profile.ai_name}, atendente virtual.` : "",
           profile?.ai_rules ? `Regras:\n${profile.ai_rules}` : "",
-<<<<<<< HEAD
           !audioEligible ? "Responda normalmente em texto; não tente gerar nem enviar áudio." : "",
           audioEligible
             ? "A resposta pode ser enviada como áudio usando metadata.voice_settings.voice_reference_id e metadata.voice_settings.voice_tuning. Para entregar áudio, chame metadata.audio_delivery.send_url com POST JSON contendo secret=metadata.callback_secret, user_id=metadata.user_id, instance_name=metadata.instance_name, remote_jid=metadata.remote_jid, queue_id=metadata.queue_id, voice_model_id=metadata.voice_settings.voice_reference_id e text com a resposta. Se responder ok=true, não envie texto nem chame o callback normal: o endpoint já regista a mensagem e desconta apenas os segundos de áudio. Se responder text_fallback=true ou falhar, envie a resposta em texto e use o callback normal. Não chame o endpoint mais de uma vez por resposta."
             : "",
-=======
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
           "Provas sociais: consulte match_social_proofs com o contexto e o produto exato identificados na conversa. Nunca apresente um testemunho de produto como avaliação de outro produto, nem um testemunho de produto como avaliação de um serviço. Use apenas resultados ativos e relevantes; testemunhos de serviço são evidências gerais da empresa ou dos serviços prestados.",
         ].filter(Boolean).join("\n\n");
 
@@ -863,7 +833,6 @@ Deno.serve(async (req) => {
               fromMe,
             },
             user_id: userId,
-<<<<<<< HEAD
             business_hours: profile?.business_hours || null,
             voice_settings: voiceSettings,
             audio_delivery: {
@@ -875,8 +844,6 @@ Deno.serve(async (req) => {
               audio_unlimited: audioUnlimited,
               fallback: "send_text",
             },
-=======
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
             callback_url: `${SUPABASE_URL}/functions/v1/n8n-callback`,
             callback_secret: Deno.env.get("N8N_CALLBACK_SECRET") || "",
             social_proof_retrieval: {
@@ -908,10 +875,7 @@ Deno.serve(async (req) => {
             media_kind: kind,
             media_mimetype: messagePayload.mime_type,
           },
-<<<<<<< HEAD
           business_hours: profile?.business_hours || null,
-=======
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
           business_logic: {
             system_prompt: systemPrompt,
             messages_remaining: limit - used,
@@ -940,10 +904,7 @@ Deno.serve(async (req) => {
 
         const queuedPayload = {
           ...payload,
-<<<<<<< HEAD
           message_data: { ...payload.message_data, media_base64: null as string | null },
-=======
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
           metadata: { ...payload.metadata, queue_id: queued.id },
         };
         EdgeRuntime.waitUntil((async () => {

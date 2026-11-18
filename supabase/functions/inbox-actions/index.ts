@@ -6,7 +6,6 @@ const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const EVOLUTION_URL = (Deno.env.get("EVOLUTION_API_URL") || "https://api.muwoyo.com").replace(/\/+$/, "");
 const EVOLUTION_KEY = Deno.env.get("EVOLUTION_API_KEY") || "";
 const admin = createClient(SUPABASE_URL, SERVICE_KEY);
-<<<<<<< HEAD
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value);
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -16,10 +15,6 @@ const evo = async (path: string, body: unknown, method = "POST") => fetch(`${EVO
   body: JSON.stringify(body),
   signal: AbortSignal.timeout(15000),
 });
-=======
-const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-const evo = async (path: string, body: unknown, method = "POST") => fetch(`${EVOLUTION_URL}${path}`, { method, headers: { "Content-Type": "application/json", apikey: EVOLUTION_KEY }, body: JSON.stringify(body) });
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -34,7 +29,6 @@ Deno.serve(async (req) => {
     const phone = String(body.phoneNumber || "");
     const instanceName = String(body.instanceName || "");
 
-<<<<<<< HEAD
     if (action === "forward_messages") {
       const conversationId = typeof body.conversationId === "string" ? body.conversationId : "";
       const messageIds = body.messageIds;
@@ -178,8 +172,6 @@ Deno.serve(async (req) => {
       return json({ ok: failedIds.length === 0, forwardedCount, failedCount: failedIds.length, failedIds }, failedIds.length && !forwardedCount ? 502 : 200);
     }
 
-=======
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
     if (action === "delete_messages") {
       const conversationId = typeof body.conversationId === "string" ? body.conversationId : "";
       const messageIds = body.messageIds;

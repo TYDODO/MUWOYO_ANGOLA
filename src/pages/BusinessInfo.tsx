@@ -1,10 +1,6 @@
 import { useEffect, useState } from "react";
 import DashboardShell from "@/components/DashboardShell";
-<<<<<<< HEAD
 import BusinessHoursConfig, { normalizeBusinessHours, type BusinessHours } from "@/components/BusinessHoursConfig";
-=======
-import BusinessHoursConfig from "@/components/BusinessHoursConfig";
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,10 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { buildProfilePayload } from "@/lib/profile-persistence";
-<<<<<<< HEAD
 import type { Json } from "@/integrations/supabase/types";
-=======
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
 import { Switch } from "@/components/ui/switch";
 import {
   clearBusinessInfoDraft,
@@ -29,7 +22,6 @@ import {
 export default function BusinessInfo() {
   const { user } = useAuth();
   const { toast } = useToast();
-<<<<<<< HEAD
   const [form, setForm] = useState<{
     business_name: string;
     ai_name: string;
@@ -41,9 +33,6 @@ export default function BusinessInfo() {
     appointment_duration_minutes: number;
     accepts_appointments: boolean;
   }>({
-=======
-  const [form, setForm] = useState({
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
     business_name: "",
     ai_name: "",
     transfer_phone: "",
@@ -70,13 +59,9 @@ export default function BusinessInfo() {
       business_name: cached.business_name || current.business_name,
       ai_name: cached.ai_name || current.ai_name,
       transfer_phone: cached.transfer_phone || current.transfer_phone,
-<<<<<<< HEAD
       business_hours: cached.business_hours
         ? normalizeBusinessHours(cached.business_hours)
         : current.business_hours,
-=======
-      business_hours: cached.business_hours ?? current.business_hours,
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
       ai_personality: cached.ai_personality || current.ai_personality,
       business_description: cached.business_description || current.business_description,
       ai_rules: cached.ai_rules || current.ai_rules,
@@ -142,13 +127,9 @@ export default function BusinessInfo() {
         business_name: cached?.business_name || data?.business_name || "",
         ai_name: cached?.ai_name || data?.ai_name || "",
         transfer_phone: cached?.transfer_phone || data?.transfer_phone || "",
-<<<<<<< HEAD
         business_hours: (cached?.business_hours ?? data?.business_hours)
           ? normalizeBusinessHours(cached?.business_hours ?? data?.business_hours)
           : undefined,
-=======
-        business_hours: cached?.business_hours ?? data?.business_hours ?? undefined,
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
         ai_personality: cached?.ai_personality || data?.ai_personality || "",
         business_description: cached?.business_description || data?.business_description || "",
         ai_rules: cached?.ai_rules || data?.ai_rules || "",
@@ -174,7 +155,6 @@ export default function BusinessInfo() {
     if (!user) return { error: { message: "Sem utilizador" } };
     setSaving(true);
     const payload = buildProfilePayload({
-<<<<<<< HEAD
       form,
       businessHours: form.business_hours as Json | undefined,
     });
@@ -184,27 +164,17 @@ export default function BusinessInfo() {
       .eq("user_id", user.id)
       .select("user_id")
       .maybeSingle();
-=======
-      userId: user.id,
-      form,
-      businessHours: form.business_hours,
-    });
-    const { error } = await supabase.from("profiles").upsert(payload, { onConflict: "user_id" });
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
     setSaving(false);
 
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
       return { error };
     }
-<<<<<<< HEAD
     if (!data) {
       const missingProfileError = new Error("Não foi encontrado um perfil da empresa para guardar as alterações.");
       toast({ title: "Erro", description: missingProfileError.message, variant: "destructive" });
       return { error: missingProfileError };
     }
-=======
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
     clearBusinessInfoDraft(user.id);
     toast({ title: "Guardado", description: "Informações atualizadas com sucesso." });
     return {};

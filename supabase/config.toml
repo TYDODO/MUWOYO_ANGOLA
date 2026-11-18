@@ -50,7 +50,6 @@ verify_jwt = false
 
 [functions.delivery-management]
 verify_jwt = false
-<<<<<<< HEAD
 
 [functions.clone-voice]
 verify_jwt = true
@@ -63,5 +62,3 @@ verify_jwt = true
 
 [functions.send-voice]
 verify_jwt = false
-=======
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e

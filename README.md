@@ -1,7 +1,26 @@
-<<<<<<< HEAD
 # Muwoyo
 
 Aplicação Muwoyo para automação de atendimento e vendas via WhatsApp.
+
+## Meta Pixel e consentimento de cookies
+
+O Pixel de marketing usado pela Muwoyo é configurado por `VITE_META_PIXEL_ID`
+(ID público: `1323564576501408`). O valor está no `.env.example` e deve ser
+definido também nas variáveis de ambiente do serviço de build/deploy antes de
+compilar o frontend. Como a variável tem o prefixo `VITE_`, o ID fica visível
+no código entregue ao navegador; não é uma chave secreta.
+
+O script da Meta só é carregado depois de o visitante aceitar cookies de
+marketing. A escolha é guardada no navegador e pode ser alterada em “Gerir
+preferências de cookies” na Política de Privacidade. Antes do consentimento ou
+após a recusa, nenhum evento é enviado. O Pixel mede visualizações de página e
+da página inicial, registo, início do teste e contacto; eventos de navegação
+com parâmetros sensíveis na URL são ignorados. Não envie conteúdo de conversas,
+credenciais, tokens ou dados de pagamento nos parâmetros de eventos.
+
+Para validar a instalação, configure o mesmo ID no ambiente de produção,
+publique uma nova build e use o Meta Pixel Helper ou o Gestor de Eventos da Meta
+para confirmar que os eventos só aparecem depois de aceitar o consentimento.
 
 ## Clonagem de voz e minutos de áudio
 
@@ -55,8 +74,3 @@ reordenada e fica guardada por configuração.
 No Inbox, mensagens selecionadas podem ser reencaminhadas para outro contacto da
 mesma instância WhatsApp. A sincronização de contactos também cria e associa as
 etiquetas devolvidas pela integração WhatsApp Business ao CRM.
-=======
-# tr
-
-Aplicação Muwoyo para automação de atendimento e vendas via WhatsApp.
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e

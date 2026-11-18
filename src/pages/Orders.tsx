@@ -535,14 +535,8 @@ export default function Orders() {
           <Button variant="outline" onClick={() => exportOrders(selectedOrders.length ? selectedOrders : filteredRows)}>
             <FileDown className="mr-2 h-4 w-4" />Exportar PDF{selectedOrders.length ? ` (${selectedOrders.length})` : ""}
           </Button>
-<<<<<<< HEAD
           {isOwner && selectedOrders.length > 0 && deliveryPeople.length > 0 && <Button
             variant="outline"
-=======
-          {isOwner && <Button
-            variant="outline"
-            disabled={!selectedOrders.length || !deliveryPeople.length}
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
             onClick={() => {
               setAssignmentPersonId("");
               setAssignmentOpen(true);
@@ -714,16 +708,9 @@ export default function Orders() {
               </div>
               {(open.delivery_address || open.customer_location) && <Button asChild size="sm" variant="outline"><a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(open.delivery_address || open.customer_location || "")}`} target="_blank" rel="noreferrer">Abrir localização no mapa</a></Button>}
               {isOwner && <div className="flex flex-wrap gap-1">{(assignments[open.id] || []).map((person) => <Badge key={person.id} variant={person.is_primary ? "default" : "outline"}>{person.name}{person.is_primary ? " · responsável" : ""}</Badge>)}</div>}
-<<<<<<< HEAD
               {isOwner && deliveryPeople.length > 0 && <Button
                 className="w-full"
                 variant="outline"
-=======
-              {isOwner && <Button
-                className="w-full"
-                variant="outline"
-                disabled={!deliveryPeople.length}
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
                 onClick={() => {
                   setSelectedExportIds([open.id]);
                   setAssignmentPersonId("");

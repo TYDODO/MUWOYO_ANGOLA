@@ -3,11 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-<<<<<<< HEAD
 import { ArrowRight, PlayCircle } from "lucide-react";
-=======
-import { ArrowRight, Zap, Shield, Clock, MessageCircle, PlayCircle } from "lucide-react";
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
 import heroPolo from "@/assets/landing/hero-polo.png";
 import heroTshirt from "@/assets/landing/hero-tshirt.jpg";
 import heroShirt from "@/assets/landing/hero-shirt.jpg";
@@ -95,7 +91,6 @@ const messagesSequence: Message[] = [
   },
 ];
 
-<<<<<<< HEAD
 const heroTitle = "A infraestrutura angolana que reúne tudo o que o seu negócio precisa para atender, vender e escalar automaticamente.";
 const heroDescription = "Uma plataforma completa que reúne atendimento automatizado com atendentes virtuais, CRM, campanhas, gestão de produtos, loja online, vendas, pedidos, entregas, Inbox e muito mais. Tudo o que o seu negócio precisa para automatizar processos, aumentar a produtividade, vender mais e crescer sem precisar aumentar proporcionalmente a sua equipa.";
 
@@ -113,17 +108,11 @@ export default function HeroSection() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [typing, setTyping] = useState(false);
   const [heroCopy, setHeroCopy] = useState("");
-=======
-export default function HeroSection() {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [typing, setTyping] = useState(false);
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
   const [introVideo, setIntroVideo] = useState<{ title: string; video_url: string; cover_url: string | null } | null>(null);
   const [introOpen, setIntroOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-<<<<<<< HEAD
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       setHeroCopy(heroTitle);
       return;
@@ -163,8 +152,6 @@ export default function HeroSection() {
   }, []);
 
   useEffect(() => {
-=======
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
     void (async () => {
       const { data, error } = await appDb
         .from("tutorial_videos")
@@ -181,7 +168,6 @@ export default function HeroSection() {
   }, []);
 
   useEffect(() => {
-<<<<<<< HEAD
     let index = 0;
     let timer: ReturnType<typeof setTimeout>;
 
@@ -216,48 +202,6 @@ export default function HeroSection() {
 
     showNext();
     return () => clearTimeout(timer);
-=======
-    let i = 0;
-
-    const showNext = () => {
-      const msg = messagesSequence[i];
-      if (!msg) return;
-
-      if (msg.from === "bot") {
-        setTyping(true);
-        setTimeout(() => {
-          setTyping(false);
-          setMessages((prev) => [...prev, msg]);
-          i++;
-          if (i >= messagesSequence.length) {
-            setTimeout(() => {
-              setMessages([]);
-              i = 0;
-              showNext();
-            }, 3000);
-            return;
-          }
-          setTimeout(showNext, 1500);
-        }, 1800);
-      } else {
-        setTimeout(() => {
-          setMessages((prev) => [...prev, msg]);
-          i++;
-          if (i >= messagesSequence.length) {
-            setTimeout(() => {
-              setMessages([]);
-              i = 0;
-              showNext();
-            }, 3000);
-            return;
-          }
-          setTimeout(showNext, 1200);
-        }, 1000);
-      }
-    };
-
-    showNext();
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
   }, []);
 
   useEffect(() => {
@@ -275,7 +219,6 @@ export default function HeroSection() {
 
       <div className="container mx-auto px-4 sm:px-6 grid lg:grid-cols-2 gap-8 items-start">
         {/* TEXTO */}
-<<<<<<< HEAD
         <div className="space-y-8 animate-fade-up lg:mt-24">
           <h1 aria-label={heroTitle} className="min-h-[6.6rem] text-2xl font-semibold leading-[1.14] tracking-[-0.035em] text-slate-800 sm:min-h-[7rem] sm:text-3xl md:text-4xl lg:min-h-[10rem] lg:text-[2.75rem]">
             {highlightHeroWords(heroCopy)}
@@ -290,42 +233,10 @@ export default function HeroSection() {
             <Button
               size="lg"
               className="h-14 rounded-full bg-emerald-600 px-8 text-base font-semibold text-white shadow-[0_8px_24px_rgba(5,150,105,0.28)] transition hover:-translate-y-0.5 hover:bg-emerald-700 hover:shadow-[0_12px_30px_rgba(5,150,105,0.4)]"
-=======
-        <div className="space-y-6 sm:space-y-8 animate-fade-up lg:mt-24">
-          <h1 className="text-2xl font-extrabold leading-[1.1] tracking-tight text-slate-950 sm:text-3xl md:text-4xl lg:text-5xl">
-            Do primeiro contacto à entrega. Toda a sua operação comercial num só lugar.
-          </h1>
-
-          <p className="text-base sm:text-lg text-slate-600 max-w-2xl leading-relaxed">
-            A Muwoyo oferece atendimento automatizado no WhatsApp e integra as ferramentas necessárias para gerir clientes, organizar vendas, acompanhar pedidos e coordenar entregas. Simplifique processos, automatize tarefas e mantenha o controlo de cada etapa do seu negócio.
-          </p>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-            {[
-              { text: "Respostas em segundos", icon: Zap },
-              { text: "Produtos e catálogo", icon: Shield },
-              { text: "Atendimento 24/7", icon: Clock },
-              { text: "IA adaptada ao seu negócio", icon: MessageCircle },
-            ].map((f, i) => (
-              <div key={i} className="flex items-center gap-2 sm:gap-3">
-                <f.icon className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500 flex-shrink-0" />
-                <span className="text-sm font-medium text-slate-600">
-                  {f.text}
-                </span>
-              </div>
-            ))}
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-2 justify-center sm:justify-start">
-            <Button
-              size="sm" // Reduzindo o tamanho
-              className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-full px-6 sm:px-6 font-bold shadow-lg text-base sm:text-base py-4 sm:py-auto h-auto sm:h-10 min-h-[40px] sm:min-h-[36px]"
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
               asChild
             >
               <Link to="/criar-conta" className="flex items-center justify-center">
                 Criar conta gratuitamente{" "}
-<<<<<<< HEAD
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
@@ -333,15 +244,6 @@ export default function HeroSection() {
               size="lg"
               variant="outline"
               className="h-14 rounded-full border-2 border-emerald-700/25 bg-white/80 px-7 text-base font-semibold text-emerald-800 shadow-[0_6px_18px_rgba(5,150,105,0.12)] transition hover:-translate-y-0.5 hover:border-emerald-700/40 hover:bg-emerald-50 hover:shadow-[0_10px_24px_rgba(5,150,105,0.22)]"
-=======
-                <ArrowRight className="ml-2 w-3 h-3 sm:w-4 sm:h-4" />
-              </Link>
-            </Button>
-            <Button
-              size="sm" // Reduzindo o tamanho
-              variant="outline"
-              className="border-emerald-500 text-emerald-500 hover:bg-emerald-50 rounded-full px-4 sm:px-6 font-bold text-sm sm:text-base py-3 sm:py-auto h-auto sm:h-10 min-h-[36px] sm:min-h-[36px]"
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
               onClick={() => setIntroOpen(true)}
             >
               <PlayCircle className="mr-2 h-4 w-4" />

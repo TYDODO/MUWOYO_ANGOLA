@@ -1,9 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { isEvolutionMessageFromMe, resolveDeliveryStatus, resolveMessageDirection } from "../../../src/lib/message-identity.ts";
-<<<<<<< HEAD
 import { syncWhatsAppLabels } from "../_shared/whatsapp-labels.ts";
-=======
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -27,7 +24,6 @@ const json = (data: unknown, status = 200) =>
 
 const normalizePhone = (value = "") => value.split("@")[0]?.replace(/\D/g, "") || "";
 const isValidIndividualPhone = (value = "") => /^[1-9][0-9]{7,14}$/.test(value) && !value.includes("-");
-<<<<<<< HEAD
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -49,10 +45,6 @@ const valueArray = (value: unknown): unknown[] => {
   }
   return [];
 };
-=======
-const remoteJid = (item: any) => item?.id || item?.remoteJid || item?.jid || item?.key?.remoteJid || "";
-const valueArray = (value: any) => Array.isArray(value) ? value : value?.chats || value?.contacts || value?.messages || value?.data || [];
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
 
 const fetchProfilePicture = async (instance: string, phone: string) => {
   try {
@@ -134,10 +126,7 @@ Deno.serve(async (req) => {
     }
     const userId = owner?.user_id || actorUserId;
     const requestedInstance = String(requestBody?.instanceName || "");
-<<<<<<< HEAD
     const chatOffset = Math.max(0, Number.isInteger(Number(requestBody?.chatOffset)) ? Number(requestBody.chatOffset) : 0);
-=======
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
     let instanceQuery = admin.from("instances").select("instance_name").eq("user_id", userId);
     if (requestedInstance) instanceQuery = instanceQuery.eq("instance_name", requestedInstance);
     const { data: instance, error: instanceError } = await instanceQuery.order("created_at", { ascending: false }).limit(1).maybeSingle();
@@ -211,15 +200,10 @@ Deno.serve(async (req) => {
       }
     }
 
-<<<<<<< HEAD
     const contactsByPhone = new Map<string, Record<string, unknown>>();
     for (const rawItem of valueArray(contactsResponse.data)) {
       const item = asRecord(rawItem);
       if (!item) continue;
-=======
-    const contactsByPhone = new Map<string, any>();
-    for (const item of valueArray(contactsResponse.data)) {
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
       const phone = normalizePhone(remoteJid(item));
       if (phone) contactsByPhone.set(phone, item);
     }
@@ -229,32 +213,23 @@ Deno.serve(async (req) => {
     let profilePictureRefreshes = 0;
     let historiesSynced = 0;
     let historyPending = 0;
-<<<<<<< HEAD
     const allChats = valueArray(chatsResponse.data);
     const chatsPage = allChats.slice(chatOffset, chatOffset + MAX_CHAT_HISTORIES_PER_SYNC);
     for (const rawChat of chatsPage) {
       const chat = asRecord(rawChat);
       if (!chat) continue;
-=======
-    for (const chat of valueArray(chatsResponse.data)) {
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
       const jid = remoteJid(chat);
       const isGroup = jid.endsWith("@g.us");
       if (isGroup || jid.includes("@broadcast")) continue;
       const phone = normalizePhone(jid);
       if (!phone || !jid.endsWith("@s.whatsapp.net") || !isValidIndividualPhone(phone)) continue;
       const profile = contactsByPhone.get(phone);
-<<<<<<< HEAD
       const incomingName = [profile?.pushName, profile?.name, profile?.notify, profile?.verifiedBizName]
         .find((value): value is string => typeof value === "string" && value.trim().length > 0) || null;
       const conversationTimestamp = Number(chat.conversationTimestamp);
       const lastMessageAt = chat.conversationTimestamp && Number.isFinite(conversationTimestamp)
         ? new Date(conversationTimestamp * 1000).toISOString()
         : asString(chat.updatedAt) || new Date().toISOString();
-=======
-      const incomingName = profile?.pushName || profile?.name || profile?.notify || profile?.verifiedBizName || null;
-      const lastMessageAt = chat?.conversationTimestamp ? new Date(Number(chat.conversationTimestamp) * 1000).toISOString() : chat?.updatedAt || new Date().toISOString();
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
       const { data: existingContact, error: existingContactError } = await admin
         .from("whatsapp_contacts")
         .select("id,name,profile_picture_url,profile_picture_updated_at")
@@ -263,15 +238,11 @@ Deno.serve(async (req) => {
         .eq("phone_number", phone)
         .maybeSingle();
       if (existingContactError) throw existingContactError;
-<<<<<<< HEAD
       const providerPictureUrl = asString(chat.profilePictureUrl)
         || asString(chat.profilePicUrl)
         || asString(profile?.profilePictureUrl)
         || asString(profile?.profilePicUrl)
         || null;
-=======
-      const providerPictureUrl = chat?.profilePictureUrl || chat?.profilePicUrl || profile?.profilePictureUrl || profile?.profilePicUrl || null;
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
       const profilePictureExpired = !existingContact?.profile_picture_updated_at
         || Date.now() - new Date(existingContact.profile_picture_updated_at).getTime() > 7 * 24 * 60 * 60 * 1000;
       const canRefreshPicture = profilePictureExpired && profilePictureRefreshes < MAX_PROFILE_PICTURE_REFRESHES_PER_SYNC;
@@ -285,10 +256,7 @@ Deno.serve(async (req) => {
       const { data: contact, error: contactError } = await admin.from("whatsapp_contacts").upsert({ user_id: userId, instance_name: instanceName, remote_jid: jid, is_group: isGroup, phone_number: phone, name, profile_picture_url: profilePictureUrl, profile_picture_updated_at: profilePictureUpdatedAt, last_message_at: lastMessageAt }, { onConflict: "user_id,instance_name,phone_number" }).select("id").single();
       if (contactError) throw contactError;
       if (!contact?.id) throw new Error("contact_upsert_returned_no_id");
-<<<<<<< HEAD
       await syncWhatsAppLabels(admin, userId, contact.id, profile?.labels);
-=======
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
       const { error: conversationError } = await admin.from("inbox_conversations").upsert({ user_id: userId, instance_name: instanceName, contact_id: contact.id, last_message_at: lastMessageAt }, { onConflict: "user_id,instance_name,contact_id", ignoreDuplicates: false });
       if (conversationError) throw conversationError;
       conversations += 1;
@@ -296,13 +264,6 @@ Deno.serve(async (req) => {
       const latestStoredAt = latestMessageByPhone.get(phone) || 0;
       const remoteLatestAt = new Date(lastMessageAt).getTime();
       if (latestStoredAt && remoteLatestAt <= latestStoredAt + 1000) continue;
-<<<<<<< HEAD
-=======
-      if (historiesSynced >= MAX_CHAT_HISTORIES_PER_SYNC) {
-        historyPending += 1;
-        continue;
-      }
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
       historiesSynced += 1;
 
       const history = await evolution(`/chat/findMessages/${encodeURIComponent(instanceName)}`, { where: { key: { remoteJid: jid } }, page: 1, offset: 100 });
@@ -313,7 +274,6 @@ Deno.serve(async (req) => {
       }
       const messageRows: Record<string, unknown>[] = [];
       const historyRows: Record<string, unknown>[] = [];
-<<<<<<< HEAD
       for (const rawItem of valueArray(history.data)) {
         const item = asRecord(rawItem);
         if (!item) continue;
@@ -330,18 +290,6 @@ Deno.serve(async (req) => {
         const fromMe = isEvolutionMessageFromMe(item);
         const direction = resolveMessageDirection(fromMe);
         const deliveryStatus = resolveDeliveryStatus(String(item.status ?? (fromMe ? "sent" : "delivered"))) ?? (fromMe ? "sent" : "delivered");
-=======
-      for (const item of valueArray(history.data)) {
-        const messageId = item?.key?.id || item?.id;
-        if (!messageId) continue;
-        const timestamp = item?.messageTimestamp ? new Date(Number(item.messageTimestamp) * 1000).toISOString() : new Date().toISOString();
-        if (new Date(timestamp).getTime() <= latestStoredAt) continue;
-        const detected = detectMessage(item);
-        const storedMedia = await persistHistoricalMedia(instanceName, item?.key, userId, detected.kind);
-        const fromMe = isEvolutionMessageFromMe(item);
-        const direction = resolveMessageDirection(fromMe);
-        const deliveryStatus = resolveDeliveryStatus(String(item?.status ?? (fromMe ? "sent" : "delivered"))) ?? (fromMe ? "sent" : "delivered");
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
         messageRows.push({
           user_id: userId,
           phone_number: phone,
@@ -381,7 +329,6 @@ Deno.serve(async (req) => {
         latestMessageByPhone.set(phone, newest);
       }
     }
-<<<<<<< HEAD
     const nextChatOffset = chatOffset + chatsPage.length;
     const hasMoreChats = nextChatOffset < allChats.length;
     return json({
@@ -395,9 +342,6 @@ Deno.serve(async (req) => {
       nextChatOffset: hasMoreChats ? nextChatOffset : null,
       totalChats: allChats.length,
     });
-=======
-    return json({ ok: true, partial: !webhook.ok || !chatsResponse.ok || !contactsResponse.ok || historyPending > 0, webhookConfigured: webhook.ok, historyPending, conversations, messages });
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
   } catch (error) {
     console.error("inbox-sync error", error);
     return json({ error: error instanceof Error ? error.message : "internal" }, 500);

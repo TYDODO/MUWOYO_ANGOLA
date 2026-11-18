@@ -21,10 +21,7 @@ import {
   Users,
   Workflow,
   RefreshCw,
-<<<<<<< HEAD
   AudioLines,
-=======
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,10 +42,7 @@ const adminItems: NavigationItem[] = [
   { title: "Planos e pacotes", to: "/admin/planos", icon: Package },
   { title: "Pagamentos e transações", to: "/admin/pagamentos", icon: CreditCard },
   { title: "Comprovativos e pagamentos", to: "/admin/comprovativos", icon: ClipboardList },
-<<<<<<< HEAD
   { title: "Gestão de áudio e vozes", to: "/admin/audio", icon: AudioLines },
-=======
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
   { title: "Créditos e consumo", to: "/admin/tokens", icon: Coins },
   { title: "Testes gratuitos", to: "/admin/testes", icon: FlaskConical },
   { title: "Analytics e crescimento", to: "/admin/funil", icon: ChartNoAxesCombined },

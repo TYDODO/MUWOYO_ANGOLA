@@ -19,7 +19,6 @@ const json = (body: Record<string, unknown>, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
 const normalizePhone = (value: string) => value.split("@")[0]?.replace(/\D/g, "") || "";
-<<<<<<< HEAD
 const findArray = (value: unknown, keys: string[]): unknown[] | null => {
   if (Array.isArray(value)) return value;
   if (!value || typeof value !== "object") return null;
@@ -30,15 +29,12 @@ const findArray = (value: unknown, keys: string[]): unknown[] | null => {
   }
   return null;
 };
-=======
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
 const pickName = (contact: Record<string, unknown> | undefined) =>
   [contact?.pushName, contact?.name, contact?.notify, contact?.verifiedBizName]
     .find((value): value is string => typeof value === "string" && value.trim().length > 0) || null;
 const pickPicture = (contact: Record<string, unknown> | undefined) =>
   [contact?.profilePictureUrl, contact?.profilePicUrl, contact?.profilePicture, contact?.picture]
     .find((value): value is string => typeof value === "string" && /^https?:\/\//i.test(value)) || null;
-<<<<<<< HEAD
 const pickPictureDeep = (value: unknown, depth = 0): string | null => {
   if (!value || typeof value !== "object" || Array.isArray(value) || depth > 3) return null;
   const record = value as Record<string, unknown>;
@@ -50,8 +46,6 @@ const pickPictureDeep = (value: unknown, depth = 0): string | null => {
   }
   return null;
 };
-=======
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
 
 async function fetchEvolution(path: string, body: Record<string, unknown>) {
   const response = await fetch(`${EVOLUTION_URL}${path}`, {
@@ -79,14 +73,7 @@ async function fetchProfilePicture(instanceName: string, phone: string) {
     if (!response.ok) {
       return { url: null, notFound: response.status === 404, error: response.status === 404 ? null : `evolution_${response.status || "unavailable"}` };
     }
-<<<<<<< HEAD
     const url = pickPictureDeep(response.data);
-=======
-    const data = response.data && typeof response.data === "object"
-      ? response.data as Record<string, unknown>
-      : {};
-    const url = pickPicture(data);
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
     return { url, notFound: !url, error: null };
   } catch (error) {
     return { url: null, notFound: false, error: error instanceof Error ? error.message : "evolution_unavailable" };
@@ -163,25 +150,7 @@ Deno.serve(async (req) => {
       console.error("contact_profile_provider_fetch_failed", instanceName, evolutionContacts.status);
       return json({ error: "whatsapp_contact_fetch_failed", status: evolutionContacts.status }, 502);
     }
-<<<<<<< HEAD
     const contactList = findArray(evolutionContacts.data, ["contacts", "records", "items", "data"]);
-=======
-    const responseData = evolutionContacts.data && typeof evolutionContacts.data === "object"
-      ? evolutionContacts.data as Record<string, unknown>
-      : {};
-    const nestedData = responseData.data && typeof responseData.data === "object"
-      ? responseData.data as Record<string, unknown>
-      : {};
-    const contactList = Array.isArray(evolutionContacts.data)
-      ? evolutionContacts.data
-      : Array.isArray(responseData.contacts)
-        ? responseData.contacts
-        : Array.isArray(responseData.data)
-          ? responseData.data
-          : Array.isArray(nestedData.contacts)
-            ? nestedData.contacts
-        : null;
->>>>>>> 5d5280f0f4276c5f70aa07cbccc56e7ed9a56b0e
     if (!contactList) return json({ error: "invalid_contact_response" }, 502);
 
     const providerContacts = new Map<string, Record<string, unknown>>();
